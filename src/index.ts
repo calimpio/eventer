@@ -4,7 +4,7 @@
 
 // Ftd: Reducir el uso de llaves string para los escuchadores lo que mas se pueda.
 
-export type ListenerController<Props extends any[], Returns = Promise<void> | void> = {
+export type ListenerController<Props extends any[], Returns = Promise<void> | void, Description = string> = {
     /**
      * Modificar el escuchador del evento. 
      * 
@@ -14,79 +14,39 @@ export type ListenerController<Props extends any[], Returns = Promise<void> | vo
     /**
      * Eliminar el escuchador del evento
      */
-    removeEventListener(): void
-}
-
-export type EventBrocastController<Props extends any[], Returns> = {
-    addBroadcastListener: (callback: (...parmas: Props) => Returns) => ListenerController<Props, Returns>;
-    addUniqueBroadcastListener: (key: string, callback: (...parmas: Props) => Returns, doOneTime?: boolean) => void;
-    broadcastEmit: (...params: Props) => Returns[];
-    removeUniqueBroadcastListener(key: string): void
-    createBroadcastListenerInstance(): ListenerController<Props, Returns>
-}
-
-export type EventBrocastControllerAsync<Props extends any[], Returns> = {
-    addBroadcastListenerAsync: (callback: (...parmas: Props) => Returns) => ListenerController<Props, Promise<Returns> | Returns>;
-    broadcastEmitAsync: (...params: Props) => Promise<Returns[]>;
-    createBroadcastListenerInstance(): ListenerController<Props, Promise<Returns> | Returns>
-}
-
-export type EventController<Props extends any[]> = {
-    addListener: (callback: (...parmas: Props) => void, doOneTime?: boolean) => ListenerController<Props, void>;
-    emit: (...params: Props) => void;
-}
-
-export type EventControllerAsync<Props extends any[] = []> = {
+    remove(): void
     /**
-     * Añadir un escuchador a una lista del evento que espera a que se emita.
-     * 
-     * @param callback 
-     * @param doOneTime 
-     * @returns 
+     * Estado del escuchador
      */
-    addListenerAsync: (callback: (...parmas: Props) => any, doOneTime?: boolean) => ListenerController<Props>;
+    state: Readonly<"idle" | "removed" | "running" | "willRemove" | "desattached" | "willAttach">
+}
+
+export type EventBrocastController<Props extends any[], Returns, Name = string> = {
+    createBroadcastListener(): ListenerController<Props, Promise<Returns> | Returns, Name>
+    broadcastEmit: (...params: Props) => Promise<Returns[] | undefined>;
+}
+
+export type EventController<Props extends any[] = [], Name = string> = {
+
+    /**
+    * Crear un unico escuchador en el evento. Implementar en los estados de React.
+    */
+    createListener(): ListenerController<Props, Promise<void> | void, Name>
     /**
      * Emitir evento
      * 
      * @param params 
      * @returns 
      */
-    emitAsync: (...params: Props) => Promise<void>;
-    /**
-     * Crear escuchador unico. Cuando se quiere implementar en las vistas
-     * 
-     * @param key 
-     * @param callback 
-     * @param doOneTime 
-     * @returns 
-     */
-    addUniqueListenerAsync: (key: string, callback: (...parmas: Props) => any, doOneTime?: boolean) => ListenerController<Props>;
-    /**
-     * Borrar escuchador unico
-     * @param key 
-     */
-    deleteUniqueListener(key: string): void
+    emit: (...params: Props) => Promise<void>;
     /**
      * Borrar todos los escucahdores
      */
-    removeAllEvents(): void
-    /**
-     * Crear un unico escuchador en el evento. Implementar en los estados de React.
-     */
-    createListenerInstance(): ListenerController<Props>
+    removeEvent(): void
+
 }
 
-export type EventObservableControllerAsync<T> = {
-    /**
-     * Nombre del evento
-     */
-    name: string,
-    /**
-     * Observar al moemnto de modificar el valor. Añade un escuchador al evento.
-     * @param callback 
-     * @returns 
-     */
-    subscribe: (callback: (value: T) => any, noFirstCall?: boolean, doOneTime?: boolean) => ListenerController<[value: T]>;
+export type EventObservableController<T, Name = string> = {
     /**
      * Modificar el valor y emite un evento al ser diferente el nuevo valor al antiguo.
      * @param value 
@@ -101,7 +61,7 @@ export type EventObservableControllerAsync<T> = {
      * @param noFirstCall  
      * @returns 
      */
-    createSubscriber: (key?: string, callback?: (value: T) => Promise<void> | void, noFirstCall?: boolean, doOneTime?: boolean) => SubscriberController<T>
+    createSubscriber: (key?: string, callback?: (value: T) => Promise<void> | void, noFirstCall?: boolean, doOneTime?: boolean) => SubscriberController<T, Name>
     /**
      * Obtener el valor
      */
@@ -117,14 +77,14 @@ export type EventObservableControllerAsync<T> = {
     unsubscribes(): void
 }
 
-export interface SubscriberController<T> {
+export interface SubscriberController<T, Name = string> {
     /**
      * Subcribirse al evento unico. Cuando se quiere observar al moemnto de modificar el valor desde las vistas.
      * @param callback 
      * @param noFirstCall 
      * @returns 
      */
-    subscribe: (callback: (value: T) => Promise<void> | void, noFirstCall?: boolean, doOneTime?: boolean) => ListenerController<[value: T]>;
+    subscribe: (callback: (value: T) => Promise<void> | void, noFirstCall?: boolean, doOneTime?: boolean) => ListenerController<[value: T], Promise<void> | void, Name>;
     /**
      * Modificar valor
      * @param value 
@@ -142,7 +102,7 @@ export interface SubscriberController<T> {
     get(): T
 }
 
-export interface ValidatorController<Model> {
+export interface ValidatorController<Model, Name extends string = string> {
     /**
      * Añadir una propiedad a validar
      * @param key 
@@ -164,48 +124,42 @@ export interface ValidatorController<Model> {
      * @param key 
      * @param onChange 
      */
-    getProps(key: keyof Model, onChange?: (value: any, valid: EventObservableControllerAsync<boolean>) => void): FormProps
+    getProps(key: keyof Model, onChange?: (value: any, valid: EventObservableController<boolean>) => void): FormProps
     /**
      * Obetener los escuchadores para las acciones
      */
-    getEvents(): FormEventsController<Model>
+    getEvents(): FormEventsController<Model, `events of ${Name}`>
     /**
      * Obtener el modelo
      */
     getModel(): Model | undefined
 
     /**
-     * Ejecutar validaciones
+     * Ejecutar validaciones usando es escuchador ValidationBroadcast
      */
     doValidation(): Promise<boolean>
 
     setDebug(value: boolean): void
     setTaskManager(v: TaskManager | null): void
     getTaskManager(): TaskManager | null
-    listeners: {
+    listeners(): {
         createSetTaskManagerListener(): ListenerController<[taskManager: TaskManager | null]>
         /**
          * Devolver validaciones de los campos del modelo
          */
-        createValidationBroadcastListener(): ListenerController<[], [PropertyKey, boolean]>
+        createValidationBroadcastListener(): ListenerController<[], [PropertyKey, boolean], `To validate in props of ${Name}`>
     }
 }
 
-export interface FormEventsController<Model> {
+export interface FormEventsController<Model, Description extends string = string> {
 
-    listeners: {
-        /**
-         * Crear escuchador unico para cuando se valide
-         * @param id 
-         * @param callback 
-         */
-        createOnValidListener(): ListenerController<[value: boolean]>
+    listeners(): {
         /**
         * Crear escuchador unico para cuando se modifiquen las propiedades
         * @param id 
         * @param callback 
         */
-        createOnChangeListener(): ListenerController<[key: keyof Model, value: any]>
+        createOnChangeListener(): ListenerController<[key: keyof Model, value: any], void | Promise<void>, `On change props in ${Description}`>
     }
 }
 
@@ -218,7 +172,7 @@ export interface FormProps {
     onChange: (value: any) => void
 }
 
-export interface LoaderController<Props extends any[], T> {
+export interface LoaderController<Props extends any[], T, Description extends string = string> {
     /**
      * Ejecutar la tarea del evento, se ejecuta si no esta cargando.
      * @param props Parametros
@@ -229,61 +183,51 @@ export interface LoaderController<Props extends any[], T> {
      */
     isLoading(): boolean
     /**
-     * Modificar el evento tarea terminada.
-     * Se usa cuando la vista esta esperando que carga pero el hook se actualiza y hay que actualizar los estados.
-     * 
-     * Modo de una tarea a una vista
-     * @param callback Respuesta de la tarea
-     */
-    setOnDone(callback: (data: T) => void): void
-    /**
-     * Modificar un evento de tarea temininada la tarea por llave unica.
-     * Se usa cuando la vista esta esperando que carga pero el hook se actualiza y hay que actualizar los estados de muchas vistas.
-     * 
-     * De una tarea a muchas vistas
-     * @param key Llave unica para evneto cuando terminó la tarea
-     * @param callback Respuesta de la tarea
-     */
-    setUniqueOnDone(key: string, callback: (data: T) => void): void
-    /**
      * Modifica la tarea del cargador sin ejecutarla
      * @param callback 
      */
     setTask(callback: (...props: Props) => Promise<T>): LoaderController<Props, T>
-    setOnError(callback: (error: any) => void): void
-    setUniqueOnError(key: string, callback: (error: any) => void): void
-    listeners: {
+    /**
+     * Escuchadores
+     */
+    listeners(): {
         /**
          * Crear escuchador para cuando termine la tarea
          */
-        createOnDoneListener(): ListenerController<[T]>
+        createOnDoneListener(): ListenerController<[data: T], void | Promise<void>, `On task done of ${Description}`>
+        /**
+         * Crear escuchador para cuando hay un error
+         */
+        createOnErrorListener(): ListenerController<[error: any], void | Promise<void>, `On task error of ${Description}`>
     }
 }
 
-export interface TaskManager<TKey = string> {
+export interface TaskManager<TKey extends string | number = string, Name extends string = string> {
     addTask(key: TKey, fun: () => Promise<any>): TaskManager<TKey>
     execTasks(): Promise<void>
     resetTasks(): void
     isExecuting(): boolean
     stop(): void
     setTaskValidator(key: TKey, validator: ValidatorController<any> | null): void
-    listeners: {
-        createStartExecutionListener(): ListenerController<[]>
-        createEndExecutionListener(): ListenerController<[]>
-        createForEachAllTaskErrorListener(): ListenerController<[key: TKey, error: any]>
-        createOnTaskDoneListener(key: TKey): ListenerController<[data: any]> | undefined
+    listeners(): {
+        createStartExecutionListener(): ListenerController<[], void | Promise<void>, `On start execution task of ${Name}`>
+        createEndExecutionListener(): ListenerController<[], void | Promise<void>, `On end execution task of ${Name}`>
+        createForEachAllTaskErrorListener(): ListenerController<[key: TKey, error: any], void | Promise<void>, `On for each all tasks execution of ${Name}`>
+        createOnTaskDoneListener(key: TKey): ListenerController<[data: any], void | Promise<void>, `On tasks ${TKey} execution of ${Name}`> | undefined
     }
 }
 
-export interface TimerController<CompleteParams extends any[] = any[]> {
+export interface TimerController<CompleteParams extends any[] = any[], Name extends string = string> {
     start(time: number, per: number, resolve: () => CompleteParams): void
     stop(): void
     pause(): void
-    onStarted(key: string, callback: (percent: number) => void): void
-    onPaused(key: string, callback: (percent: number) => void): void
-    onRunning(key: string, callback: (percent: number, total: number, stopped: boolean) => void): void
-    onStopped(key: string, callback: (percent: number) => void): void
-    onCompleted(key: string, callback: (...params: CompleteParams) => void): void
+    listeners(): {
+        createOnStartedListener(): ListenerController<[percent: number], void | Promise<void>, `On start timer ${Name}`>
+        createOnPausedListener(): ListenerController<[percent: number], void | Promise<void>, `On paused timer ${Name}`>
+        createOnRunningListener(): ListenerController<[percent: number, total: number, stopped: boolean], void | Promise<void>, `On paused timer ${Name}`>
+        createOnStoppedListener(): ListenerController<[percent: number], void | Promise<void>, `On stoped timer ${Name}`>
+        createOnCompletedListener(): ListenerController<CompleteParams, void | Promise<void>, `On completed timer ${Name}`>
+    }
 }
 
 type EventMap = {
@@ -314,7 +258,7 @@ class ShareEventListener<Props extends any[] = any[], Returns = any> implements 
     private _willRemove = false;
     private doOneTime = false;
     private removed = false;
-
+    private isrunning = false;
     public get willRemove() {
         return this._willRemove;
     }
@@ -328,21 +272,24 @@ class ShareEventListener<Props extends any[] = any[], Returns = any> implements 
     }
 
     run(...props: Props): Returns {
+        this.isrunning = true;
         if (this.doOneTime) {
-            this.event.doAfterExec[this.name].push(this.removeEventListener);
+            this.event.doAfterExec[this.name].push(this.remove);
         }
-        return this.handler(...props)
+        const data = this.handler(...props)
+        this.isrunning = false;
+        return data;
     }
 
     on(callback: (...props: Props) => Returns, doOneTime?: boolean): void {
         this.handler = callback;
         this.doOneTime = doOneTime || false;
-        if (this.removed) {
+        if (this.removed || this.willRemove) {
             throw new Error("it's setting a listener that was removed");
         }
     }
 
-    removeEventListener() {
+    remove() {
         this._willRemove = true;
         const _delete = () => {
             const id = this.event.events[this.name]?.indexOf(this);
@@ -364,13 +311,36 @@ class ShareEventListener<Props extends any[] = any[], Returns = any> implements 
         }
     }
 
+    removeEvent() {
+        const next = this.event.events[this.name].shift();
+        if (next) {
+            next.removed = true;
+            next.removeEvent();
+        }
+    }
+
+    get state(): "idle" | "removed" | "running" | "willRemove" | "desattached" {
+        if (this.removed)
+            return "removed";
+        if (this.willRemove)
+            return "willRemove"
+        if (this.isrunning)
+            return "running"
+        return "idle";
+    }
+
     createController(): ListenerController<Props, Returns> {
+        const _self = this;
+
         return {
             on: (callback, doOneTime) => {
                 this.on(callback, doOneTime);
             },
-            removeEventListener: () => {
-                this.removeEventListener();
+            remove: () => {
+                this.remove();
+            },
+            get state() {
+                return _self.state;
             },
         }
     }
@@ -395,9 +365,9 @@ export default class GroupEvent {
     }
 
 
-    private addListener<Props extends any[], Returns>(name: string, callback: (...params: Props) => Returns, doOneTime?: boolean) {
-        const _name = this.tag + name;
-        if (this.isDebugModeOn) console.info('add event: ' + name);
+    private addListener<Props extends any[], Returns>(name: PropertyKey, callback: (...params: Props) => Returns, doOneTime?: boolean) {
+        const _name = this.tag + name.toString();
+        if (this.isDebugModeOn) console.info('add event: ' + name.toString());
         if (!this.events[_name]) this.events[_name] = [];
         const listener = new ShareEventListener({
             name: _name,
@@ -415,141 +385,105 @@ export default class GroupEvent {
         return listener.createController();
     }
 
-    private emit(name: string, ...params: any[]) {
-        const _name = this.tag + name;
-        if (!this.events[_name]) this.events[_name] = [];
-        if (this.isDebugModeOn) console.info('emit: ' + name + " execs: " + this.events[_name]?.length);
-        this.isExec[_name] = true;
-        this.events[_name]?.forEach((listener) => {
-            if (params instanceof Array && !listener.willRemove)
-                listener?.run(...(params as []));
-        })
-        this.isExec[_name] = false;
-        GroupEvent.removeAllHandlers(this.removeEvents);
-        if (this.doAfterExec[_name]) {
-            this.doAfterExec[_name].forEach(d => d());
-        }
-        this.doAfterExec[_name] = [];
-        this.removeEvents = [];
-    }
-
-    private createListenerInstancer<Props extends any[], Returns>(name: string): ListenerController<Props, Returns> {
-        let listener: ListenerController<Props, Returns> | null = null;
+    private createListenerInstance<Props extends any[], Returns>(name: PropertyKey, withRemovedSolution?: boolean): ListenerController<Props, Returns> {
+        let _listener: ListenerController<Props, Returns> | null | undefined = null;
         // do not call functions from listener controller instances before return.
         return {
             on: (callback, doOneTime) => {
                 const _callback: (...prams: Props) => Returns = (...params) => {
                     if (doOneTime) {
-                        listener = null;
+                        _listener = undefined;
                     }
                     return callback(...params);
                 }
-                listener ? listener.on(_callback, doOneTime) : (listener = this.addListener(name, _callback, doOneTime));
-
+                try {
+                    _listener ? _listener.on(_callback, doOneTime) : (_listener = this.addListener(name, _callback, doOneTime));
+                } catch (err) {
+                    if (withRemovedSolution && _listener !== undefined) {
+                        _listener = this.addListener(name, _callback, doOneTime);
+                    } else {
+                        throw err;
+                    }
+                }
             },
-            removeEventListener: () => {
-                listener?.removeEventListener();
-                listener = null;
+            remove: () => {
+                _listener?.remove();
+                _listener = undefined;
+            },
+            get state() {
+                if (_listener == null)
+                    return "willAttach";
+                if (_listener == undefined)
+                    return "desattached";
+                return _listener.state;
             },
         }
     }
 
-    private createBroadcastListenerInstancer<Props extends any[], Returns>(name: string): ListenerController<Props, Returns> {
+    private createBroadcastListenerInstancer<Props extends any[], Returns>(name: PropertyKey, withRemovedSolution?: boolean): ListenerController<Props, Returns> {
         // do not call functions from listener controller instances before return.
-        return this.createListenerInstancer("b_" + name);
+        return this.createListenerInstance("b_" + name.toString(), withRemovedSolution);
     }
 
-    private async emitAsync(name: string, ...params: any[]) {
-        const _name = this.tag + name;
+    private async emitAsync(name: PropertyKey, ...params: any[]) {
+        const _name = this.tag + name.toString();
         if (!this.events[_name]) this.events[_name] = [];
-        if (this.isDebugModeOn) console.info('emit: ' + name + " execs: " + this.events[_name]?.length);
-        this.isExec[_name] = true;
-        await this.events[_name]?.reduce(async (ac, listener) => {
-            await ac;
-            await !listener.willRemove && listener?.run(...(params as []));
-        }, Promise.resolve())
-        this.isExec[_name] = false;
-        GroupEvent.removeAllHandlers(this.removeEvents);
-        if (this.doAfterExec[_name]) {
-            this.doAfterExec[_name].forEach(d => d());
+        if (this.isDebugModeOn) console.info('emit: ' + name.toString() + " execs: " + this.events[_name]?.length);
+        if (!this.isExec[_name]) {
+            this.isExec[_name] = true;
+            await this.events[_name]?.reduce(async (ac, listener) => {
+                await ac;
+                await !listener.willRemove && listener?.run(...(params as []));
+            }, Promise.resolve())
+            this.isExec[_name] = false;
+            GroupEvent.removeAllHandlers(this.removeEvents);
+            if (this.doAfterExec[_name]) {
+                this.doAfterExec[_name].forEach(d => d());
+            }
+            this.doAfterExec[_name] = [];
+            this.removeEvents = [];
         }
-        this.doAfterExec[_name] = [];
-        this.removeEvents = [];
     }
 
-    private removeEventByName(name: string) {
-        const _name = this.tag + name;
+    private removeEventByName(name: PropertyKey) {
+        const _name = this.tag + name.toLocaleString();
         this.events[_name] = [];
         if (!this.isExec[_name]) {
-            this.events[_name] = [];
+            this.events[_name][0]?.removeEvent();
         } else {
             if (this.doAfterExec[_name]) {
-                this.doAfterExec[_name].push(() => this.events[_name] = []);
+                this.doAfterExec[_name].push(() => this.events[_name][0]?.removeEvent());
             } else {
-                this.doAfterExec[_name] = [() => this.events[_name] = []];
+                this.doAfterExec[_name] = [() => this.events[_name][0]?.removeEvent()];
             }
         }
     }
 
-    private addBroadcastListener(name: string, handler: (...params: any[]) => any, doOneTime?: boolean) {
-        return this.addListener('b_' + name, handler, doOneTime);
-    }
-
-
-    private broadcastEmit<Props extends [], Returns>(name: string, ...params: Props): Returns[] {
-        const _name = this.tag + 'b_' + name;
+    private async broadcastEmitAsync<Props extends any[], Returns>(name: PropertyKey, ...params: Props): Promise<Returns[] | undefined> {
+        const _name = this.tag + 'b_' + name.toLocaleString();
         if (!this.events[_name]) this.events[_name] = [];
-        if (this.isDebugModeOn) console.info('broadcsat emit: ' + name + " execs: " + this.events[_name]?.length);
-        this.isExec[_name] = true;
-        const result = this.events[_name]?.map((listener) => {
-            return !listener.willRemove && listener.run(...(params as []));
-        }) as Returns[];
-        this.isExec[_name] = false;
-        GroupEvent.removeAllHandlers(this.removeEvents);
-        if (this.doAfterExec[_name]) {
-            this.doAfterExec[_name].forEach(d => d());
-        }
-        this.doAfterExec[_name] = [];
-        this.removeEvents = [];
-        return result;
-    }
-
-    private async broadcastEmitAsync<Props extends [], Returns>(name: string, ...params: Props): Promise<Returns[]> {
-        const _name = this.tag + 'b_' + name;
-        if (!this.events[_name]) this.events[_name] = [];
-        if (this.isDebugModeOn) console.info('broadcsat emit: ' + name + " execs: " + this.events[_name]?.length);
-        this.isExec[_name] = true;
-        const result = await this.events[_name]?.reduce(async (ac, listener) => {
-            const list = await ac;
-            if (!listener.willRemove) {
-                let data = (await listener.run(...(params as []))) as Returns;
-                list.push(data);
+        if (this.isDebugModeOn) console.info('broadcsat emit: ' + name.toString() + " execs: " + this.events[_name]?.length);
+        if (!this.isExec[_name]) {
+            this.isExec[_name] = true;
+            const result = await this.events[_name]?.reduce(async (ac, listener) => {
+                const list = await ac;
+                if (!listener.willRemove) {
+                    let data = (await listener.run(...(params as any[]))) as Returns;
+                    list.push(data);
+                }
+                return list;
+            }, Promise.resolve<Returns[]>([]));
+            this.isExec[_name] = false;
+            GroupEvent.removeAllHandlers(this.removeEvents);
+            if (this.doAfterExec[_name]) {
+                this.doAfterExec[_name].forEach(d => d());
             }
-            return list;
-        }, Promise.resolve<Returns[]>([]));
-        this.isExec[_name] = false;
-        GroupEvent.removeAllHandlers(this.removeEvents);
-        if (this.doAfterExec[_name]) {
-            this.doAfterExec[_name].forEach(d => d());
-        }
-        this.doAfterExec[_name] = [];
-        this.removeEvents = [];
-        return result;
-    }
-
-
-
-    createController<Props extends any[]>(name: string) {
-        // do not call functions from listener controller instances before return.
-        return <EventController<Props>>{
-            addListener: (callback: (...parmas: Props) => void) => {
-                return this.addListener(name, callback as any);
-            },
-            emit: (...params: Props) => {
-                this.emit(name, ...params);
-            },
+            this.doAfterExec[_name] = [];
+            this.removeEvents = [];
+            return result;
         }
     }
+
 
     /**
      * Eventos asincronomos 
@@ -557,199 +491,128 @@ export default class GroupEvent {
      * @param name 
      * @returns 
      */
-    createControllerAsync<Props extends any[]>(name: string): EventControllerAsync<Props> {
-        const eventsKeys: Record<string, { listener: ListenerController<Props, void> }> = {};
+    createEvent<Name extends PropertyKey>(name: Name) {
         // do not call functions from listener controller instances before return.
-        return {
-            addListenerAsync: (callback: (...parmas: Props) => Promise<void>, doOneTime) => {
-                return this.addListener(name, callback as any, doOneTime);
-            },
-            emitAsync: async (...params: Props) => {
-                await this.emitAsync(name, ...params);
-            },
-            addUniqueListenerAsync: (key, callback, doOneTime) => {
-                if (!eventsKeys[key]) {
-                    eventsKeys[key] = {
-                        listener: this.createListenerInstancer(name)
-                    };
-                }
-                eventsKeys[key].listener.on(async (...params: Props) => {
-                    await callback(...params);
-                    if (doOneTime) {
-                        delete eventsKeys[key];
-                    }
-                }, doOneTime);
-                return eventsKeys[key].listener;
-            },
-            deleteUniqueListener(key: string) {
-                if (eventsKeys[key]) {
-                    eventsKeys[key].listener.removeEventListener();
-                    delete eventsKeys[key];
-                }
-            },
-            removeAllEvents: () => {
-                this.removeEventByName(name);
-            },
-            createListenerInstance: () => {
-                // do not call functions from listener controller instances before return.
-                return this.createListenerInstancer(name);
-            },
+        return <Props extends any[]>(withRemovedSolution?: boolean): EventController<Props, Name> => {
+            // do not call functions from listener controller instances before return.
+            return {
+                createListener: () => {
+                    // do not call functions from listener controller instances before return.
+                    return this.createListenerInstance(name, withRemovedSolution);
+                },
+                emit: async (...params: Props) => {
+                    await this.emitAsync(name, ...params);
+                },
+                removeEvent: () => {
+                    this.removeEventByName(name);
+                },
+            }
         }
     }
 
-
-    createBroadcastController<Props extends [], Returns extends any>(name: string): EventBrocastController<Props, Returns> {
-        const eventsKeys: Record<string, { listener: ListenerController<Props, Returns> }> = {};
+    createBroadcast<Name extends string = string>(name: Name) {
         // do not call functions from listener controller instances before return.
-        return {
-            addBroadcastListener: (callback: (...parmas: Props) => Returns) => {
-                return this.addBroadcastListener(name, callback);
-            },
-
-            addUniqueBroadcastListener: (key, callback, doOneTime) => {
-                if (eventsKeys[key]) {
-                    eventsKeys[key].listener.on((...params: Props) => {
-                        if (doOneTime) {
-                            delete eventsKeys[key];
-                        }
-                        return callback(...params);
-                    }, doOneTime);
-                } else {
-                    eventsKeys[key] = {
-                        listener: this.addBroadcastListener(name, (...params: Props) => {
-                            if (doOneTime) {
-                                delete eventsKeys[key];
-                            }
-                            return callback(...params);
-                        }, doOneTime),
-                    };
-                }
-            },
-
-            broadcastEmit: (...params: Props) => {
-                return this.broadcastEmit(name, ...params);
-            },
-            removeUniqueBroadcastListener(key) {
-                if (eventsKeys[key]) {
-                    eventsKeys[key].listener.removeEventListener();
-                    delete eventsKeys[key];
-                }
-            },
-            createBroadcastListenerInstance: () => {
-                // do not call functions from listener controller instances before return.
-                return this.createBroadcastListenerInstancer(name);
-            },
-        }
-    }
-
-    createBroadcastControllerAsync<Props extends [], Returns extends any>(name: string): EventBrocastControllerAsync<Props, Returns> {
-        // do not call functions from listener controller instances before return.
-        return {
-            addBroadcastListenerAsync: (callback: (...parmas: Props) => Returns) => {
-                return this.addBroadcastListener(name, callback);
-            },
-
-            broadcastEmitAsync: (...params: Props) => {
-                return this.broadcastEmitAsync(name, ...params);
-            },
-
-            createBroadcastListenerInstance: () => {
-                // do not call functions from listener controller instances before return.
-                return this.createBroadcastListenerInstancer(name);
-            },
+        return <Props extends any[], Returns extends any>(withRemovedSolution?: boolean): EventBrocastController<Props, Returns, Name> => {
+            return {
+                createBroadcastListener: () => {
+                    // do not call functions from listener controller instances before return.
+                    return this.createBroadcastListenerInstancer(name, withRemovedSolution);
+                },
+                broadcastEmit: (...params: Props) => {
+                    return this.broadcastEmitAsync(name, ...params);
+                },
+            }
         }
     }
 
     /**
      * Eventos para observar una propidad
      * 
-     * @param name 
-     * @param defaultValue 
+     * @param name      * 
      * @returns 
      */
-    createObservavbleControllerAsync<T>(name: string, defaultValue: T): EventObservableControllerAsync<T> {
-        const _name = this.tag + "ob_" + name;
-        let _value = defaultValue;
-        let _subcribers: Record<string, { event: ListenerController<[value: T]> }> = {};
+    createObservavble<Name extends string = string>(name: Name) {
         // do not call functions from listener controller instances before return.
-        return {
-            name,
-            subscribe: (callback, noFirstCall?: boolean, doOneTime?: boolean) => {
-                !noFirstCall && callback(_value);
-                return this.addListener(_name, callback, doOneTime);
-            },
-            next: async (value, force) => {
-                if (value !== _value || force) {
-                    _value = value;
-                    await this.emitAsync(_name, _value);
-                }
-                return _value;
-            },
-            createSubscriber: (name?: string, callback?: (value: T) => Promise<void> | void, noFirstCall?: boolean, doOneTime?: boolean) => {
-                let _listener: ListenerController<[value: T]> | null | undefined = null;
+        return <T>(defaultValue: T): EventObservableController<T, Name> => {
+            const _name = this.tag + "ob_" + name;
+            let _value = defaultValue;
+            let _subcribers: Record<string, { event: ListenerController<[value: T]> }> = {};
+            // do not call functions from listener controller instances before return.
+            return {
+                next: async (value, force) => {
+                    if (value !== _value || force) {
+                        _value = value;
+                        await this.emitAsync(_name, _value);
+                    }
+                    return _value;
+                },
+                createSubscriber: (name?: string, callback?: (value: T) => Promise<void> | void, noFirstCall?: boolean, doOneTime?: boolean) => {
+                    let _listener: ListenerController<[value: T]> | null | undefined = null;
 
-                const subscribe = (callback: (value: T) => Promise<void> | void, noFirstCall?: boolean, doOneTime?: boolean) => {
-                    _listener = name !== undefined ? _subcribers[name]?.event : _listener;
-                    const _callback = async (value: T) => {
-                        await callback(value);
-                        if (doOneTime) {
+                    const subscribe = (callback: (value: T) => Promise<void> | void, noFirstCall?: boolean, doOneTime?: boolean) => {
+                        _listener = name !== undefined ? _subcribers[name]?.event : _listener;
+                        const _callback = async (value: T) => {
+                            await callback(value);
+                            if (doOneTime) {
+                                _listener = null;
+                                if (name)
+                                    delete _subcribers[name];
+                            }
+                        }
+                        if (!_listener) {
+                            !noFirstCall && callback(_value);
+                            _listener = this.addListener(_name, _callback, doOneTime);
+                            if (name && _subcribers[name]) {
+                                _subcribers[name] = { event: _listener };
+                            }
+                            return _listener;
+                        } else {
+                            _listener.on(_callback, doOneTime);
+                            return _listener;
+                        }
+                    }
+
+                    //it's good call if has reference intance with parent
+                    if (typeof callback == "function" && name)
+                        subscribe(callback, noFirstCall, doOneTime);
+                    else if (typeof callback == "function")
+                        throw `'createSubscriber' function needs string param 'name' to save callback`;
+
+                    // do not call functions from listener controller instances before return.
+                    return {
+                        subscribe,
+                        next: async (value, force) => {
+                            if (_value !== value || force) {
+                                _value = value;
+                                await this.emitAsync(_name, _value)
+                            }
+                            return _value;
+                        },
+                        unsubscribe() {
+                            _listener?.remove();
                             _listener = null;
-                            if (name)
+                            if (name && _subcribers[name]) {
                                 delete _subcribers[name];
-                        }
+                            }
+                        },
+                        get() {
+                            return _value;
+                        },
                     }
-                    if (!_listener) {
-                        !noFirstCall && callback(_value);
-                        _listener = this.addListener(_name, _callback, doOneTime);
-                        if (name && _subcribers[name]) {
-                            _subcribers[name] = { event: _listener };
-                        }
-                        return _listener;
-                    } else {
-                        _listener.on(_callback, doOneTime);
-                        return _listener;
-                    }
-                }
-
-                //it's good call if has reference intance with parent
-                if (typeof callback == "function" && name)
-                    subscribe(callback, noFirstCall, doOneTime);
-                else if (typeof callback == "function")
-                    throw `'createSubscriber' function needs string param 'name' to save callback`;
-
-                // do not call functions from listener controller instances before return.
-                return {
-                    subscribe,
-                    next: async (value, force) => {
-                        if (_value !== value || force) {
-                            _value = value;
-                            await this.emitAsync(_name, _value)
-                        }
-                        return _value;
-                    },
-                    unsubscribe() {
-                        _listener?.removeEventListener();
-                        _listener = null;
-                        if (name && _subcribers[name]) {
-                            delete _subcribers[name];
-                        }
-                    },
-                    get() {
-                        return _value;
-                    },
-                }
-            },
-            get() {
-                return _value;
-            },
-            has(fun) {
-                if (_value !== null && _value !== undefined)
-                    fun(_value)
-            },
-            unsubscribes: () => {
-                this.removeEventByName(_name);
-            },
+                },
+                get() {
+                    return _value;
+                },
+                has(fun) {
+                    if (_value !== null && _value !== undefined)
+                        fun(_value)
+                },
+                unsubscribes: () => {
+                    this.removeEventByName(_name);
+                },
+            }
         }
+
     }
 
 
@@ -760,76 +623,51 @@ export default class GroupEvent {
      * @param task Accion a ejecutar
      * @returns 
      */
-    createLoader<Props extends any[], T>(name: string, task: (...props: Props) => Promise<T>): LoaderController<Props, T> {
-        const loadState = this.createObservavbleControllerAsync<boolean>(name + "_loading", false);
-        const taskOb = this.createObservavbleControllerAsync<(...props: Props) => Promise<T>>(name + "_task", task);
-        const done = this.createObservavbleControllerAsync<((v: T) => void) | null>(name + "_done", null);
-        const error = this.createObservavbleControllerAsync<((v: any) => void) | null>(name + "_error", null);
-        const uDone = this.createObservavbleControllerAsync<Record<string, ((v: T) => void)>>(name + "_udone", {});
-        const uError = this.createObservavbleControllerAsync<Record<string, ((v: any) => void)>>(name + "_uerror", {});
-        const _data = this.createControllerAsync<[T]>(name + "_data");
+    createLoader<Props extends any[], T, Name extends string = string>(name: Name, task: (...props: Props) => Promise<T>): LoaderController<Props, T, Name> {
+        const events = new GroupEvent;
+        const _loadState = events.createObservavble("_loading")(false);
+        const _taskOb = events.createObservavble("_task")<(...props: Props) => Promise<T>>(task);
+        const _error = events.createEvent("_error")<[error: any]>(true);
+        const _data = events.createEvent("_data")<[T]>(true);
+
         // do not call functions from listener controller instances before return.
         return {
             exec: async (...props: Props) => {
-                if (!loadState.get()) {
-                    loadState.next(true);
+                if (!_loadState.get()) {
+                    _loadState.next(true);
                     try {
-                        const data = await taskOb.get()(...props);
-                        await _data.emitAsync(data);
-                        const before = done.get();
-                        const dones = uDone.get();
-                        before && before(data);
-                        loadState.next(false);
-                        Object.values(dones).forEach(d => d(data));
-                        uDone.next({});
-                        error.next(null);
-                        uError.next({});
-                        uDone.next({});
-                        done.next(null);
+                        const data = await _taskOb.get()(...props);
+                        await _data.emit(data);
+                        _loadState.next(false);
+                        _error.removeEvent();
+                        _data.removeEvent();
                         return data
                     } catch (err) {
-                        loadState.next(false);
-                        const before = error.get();
-                        const dones = uError.get();
-                        before && before(err);
-                        Object.values(dones).forEach(d => d(err));
-                        error.next(null);
-                        uError.next({});
-                        uDone.next({});
-                        done.next(null);
+                        _loadState.next(false);
+                        await _error.emit(err);
+                        _data.removeEvent();
+                        _error.removeEvent();
                         throw err;
                     }
                 }
             },
             setTask(callback) {
-                taskOb.next(callback);
+                _taskOb.next(callback);
                 return this;
             },
             isLoading() {
-                return loadState.get();
+                return _loadState.get();
             },
-            setOnDone(callback) {
-                done.next((value) => callback(value));
-            },
-            setOnError(callback) {
-                error.next((value) => callback(value));
-            },
-            setUniqueOnDone(key, callback) {
-                const dones = uDone.get();
-                dones[key] = callback;
-                uDone.next(dones);
-            },
-            setUniqueOnError(key, callback) {
-                const errors = uError.get();
-                errors[key] = callback;
-                uError.next(errors);
-            },
-            listeners: {
+            listeners: () => ({
                 createOnDoneListener() {
                     // do not call functions from listener controller instances before return.
-                    return _data.createListenerInstance()
-                }
-            }
+                    return _data.createListener();
+                },
+                createOnErrorListener() {
+                    // do not call functions from listener controller instances before return.
+                    return _data.createListener();
+                },
+            })
         };
     }
 
@@ -839,31 +677,30 @@ export default class GroupEvent {
      * @param name 
      * @returns 
      */
-    createTasksManager<TKey extends string = string>(name: string) {
+    createTasksManager<TKey extends string = string, Name extends string = string>(name: Name) {
         let tasks: Record<string, () => Promise<void>> = {};
         let executing = false;
         let _validators: Record<string, ValidatorController<any> | null> = {};
 
-        const afterLoader = this.createControllerAsync<[]>(name + ".afterLoader");
-        const willMountTask = this.createControllerAsync<[key: TKey]>(name + ".willMountTask");
-        const forEachTasksDone = this.createControllerAsync<[key: TKey, value: any]>(name + ".foreachTasksDone");
-        const forEachTasksError = this.createControllerAsync<[key: TKey, error: any]>(name + ".foreachTasksErrors");
-        const startExecution = this.createControllerAsync(name + ".start.exec");
+        const afterLoader = this.createEvent(name + ".afterLoader")();
+        const willMountTask = this.createEvent(name + ".willMountTask")<[key: TKey]>();
+        const forEachTasksDone = this.createEvent(name + ".foreachTasksDone")<[key: TKey, value: any]>();
+        const forEachTasksError = this.createEvent(name + ".foreachTasksErrors")<[key: TKey, error: any]>();
+        const startExecution = this.createEvent(name + ".start.exec")();
         const taskLoader: Record<string, LoaderController<[], any>> = {};
 
-
         // do not call functions from listener controller instances before taskManager instance return.
-        const taskManager: TaskManager<TKey> = {
+        const taskManager: TaskManager<TKey, Name> = {
             addTask: (key, callback) => {
                 const events = new GroupEvent;
                 taskLoader[key] = events.createLoader(key, callback);
-                willMountTask.emitAsync(key);
+                willMountTask.emit(key);
                 tasks[key] = (async () => {
-                    taskLoader[key].setOnError((error) => {
-                        forEachTasksError.emitAsync(key, error);
+                    taskLoader[key].listeners().createOnErrorListener().on((error) => {
+                        forEachTasksError.emit(key, error);
                     });
                     const value = await taskLoader[key].exec();
-                    await forEachTasksDone.emitAsync(key, value);
+                    await forEachTasksDone.emit(key, value);
                     delete tasks[key];
                     delete taskLoader[key];
                     const next = Object.values(tasks).shift();
@@ -871,7 +708,7 @@ export default class GroupEvent {
                         await next()
                     } else {
                         executing = false
-                        await afterLoader.emitAsync();
+                        await afterLoader.emit();
                     }
                 })
                 return taskManager;
@@ -879,13 +716,13 @@ export default class GroupEvent {
             execTasks: async () => {
                 if (!executing) {
                     executing = true;
-                    await startExecution.emitAsync();
+                    await startExecution.emit();
                     const task = Object.values(tasks).shift();
                     if (task) {
                         await task();
                     } else {
                         executing = false;
-                        await afterLoader.emitAsync();
+                        await afterLoader.emit();
                     }
                 }
             },
@@ -904,30 +741,30 @@ export default class GroupEvent {
                 // Ftd: validar tareas y emitir eventos importantes!
                 _validators[key] = validator;
             },
-            listeners: {
+            listeners: () => ({
                 createStartExecutionListener() {
                     // do not call functions from listener controller instances before return.
-                    return startExecution.createListenerInstance();
+                    return startExecution.createListener();
                 },
                 createEndExecutionListener() {
                     // do not call functions from listener controller instances before return.
-                    return afterLoader.createListenerInstance();
+                    return afterLoader.createListener();
                 },
                 createForEachAllTaskErrorListener() {
                     // do not call functions from listener controller instances before return.
-                    return forEachTasksError.createListenerInstance();
+                    return forEachTasksError.createListener();
                 },
                 createOnTaskDoneListener: (key) => {
-                    let _listener: ListenerController<[any]> | undefined;
+                    let _listener: ListenerController<[any]> | undefined | null;
                     let _willMount: ListenerController<[string]> | undefined;
                     let _callback: ((data: any) => void | Promise<void>) | undefined;
                     let _doOneTime: boolean;
 
                     const _createInstance: ListenerController<[data: any]>["on"] = (callback, doOneTime) => {
-                        _listener = taskLoader[key]?.listeners.createOnDoneListener();
+                        _listener = taskLoader[key]?.listeners().createOnDoneListener();
                         if (_listener) {
-                            const _removeEventListenerSuper = _listener.removeEventListener;
-                            _listener.removeEventListener = () => {
+                            const _removeEventListenerSuper = _listener.remove;
+                            _listener.remove = () => {
                                 _removeEventListenerSuper();
                                 _listener = undefined;
                                 _callback = undefined;
@@ -936,7 +773,7 @@ export default class GroupEvent {
                                 await callback(...params);
                                 if (doOneTime) {
                                     _listener = undefined;
-                                    _willMount?.removeEventListener();
+                                    _willMount?.remove();
                                     _willMount = undefined;
                                     _callback = undefined;
                                 }
@@ -950,25 +787,32 @@ export default class GroupEvent {
                     // do not call functions from listener controller instances before return.
                     return {
                         on(callback, doOneTime) {
-                            _listener?.removeEventListener();
+                            _listener?.remove();
                             if (!_willMount) {
-                                _willMount = willMountTask.createListenerInstance();
+                                _willMount = willMountTask.createListener();
                                 _willMount.on((_key) => {
-                                    if (key == _key && _callback) {
+                                    if (key == _key && _callback && _listener != undefined) {
                                         _createInstance(_callback, _doOneTime);
                                     }
                                 });
                             }
                             _createInstance(callback, doOneTime);
                         },
-                        removeEventListener() {
-                            _listener?.removeEventListener();
-                            _willMount?.removeEventListener();
+                        remove() {
+                            _listener?.remove();
+                            _willMount?.remove();
                             _willMount = undefined;
+                        },
+                        get state() {
+                            if (_listener == null)
+                                return "willAttach";
+                            if (_listener == undefined)
+                                return "desattached";
+                            return _listener.state;
                         },
                     };
                 }
-            }
+            })
         }
         return taskManager;
     }
@@ -981,21 +825,20 @@ export default class GroupEvent {
      * @param model 
      * @returns 
      */
-    createValidator<Model extends object>(name: string): ValidatorController<Model> {
+    createValidator<Model extends object, Name extends string = string>(name: Name): ValidatorController<Model, Name> {
         let _config = { debug: false };
         let _debuger = makeDebuger(_config);
-        let _props: Partial<Record<keyof Model, EventObservableControllerAsync<boolean>>> = {};
+        let _props: Partial<Record<keyof Model, EventObservableController<boolean>>> = {};
         let _taskManager: TaskManager | null = null;
-        const _onValid = this.createControllerAsync<[value: boolean]>("onValid." + name);
-        const _setTaskManager = this.createControllerAsync<[taskManager: TaskManager | null]>("setTaskManager." + name);
-        const _makeValidations = this.createBroadcastControllerAsync<[], [PropertyKey, boolean]>("dovalidation." + name);
-        const _onChange = this.createControllerAsync<[key: keyof Model, value: any]>("on-change." + name);
+        const _setTaskManager = this.createEvent("setTaskManager." + name)<[taskManager: TaskManager | null]>();
+        const _makeValidations = this.createBroadcast("dovalidation." + name)<[], [PropertyKey, boolean]>();
+        const _onChange = this.createEvent("on-change." + name)<[key: keyof Model, value: any]>();
         let _model: Model | undefined;
 
         const addProp = (key: keyof Model, defaultValidationValue?: boolean) => {
             if (!_props[key]) {
                 _debuger(`validadion ${name} add prop: ${key.toString()}`);
-                _props[key] = this.createObservavbleControllerAsync(key.toString() + ".validation", defaultValidationValue || false);
+                _props[key] = this.createObservavble(key.toString() + ".validation")(defaultValidationValue || false);
             }
         }
         // do not call functions from listener controller instances before return.
@@ -1003,7 +846,7 @@ export default class GroupEvent {
             addProp,
             setModel: (model) => {
                 Object.values(_props).forEach(d => {
-                    (d as EventObservableControllerAsync<boolean>).unsubscribes();
+                    (d as EventObservableController<boolean>).unsubscribes();
                 })
                 _props = {};
                 _model = model;
@@ -1019,14 +862,11 @@ export default class GroupEvent {
             },
             getEvents() {
                 return {
-                    listeners: {
+                    listeners: () => ({
                         createOnChangeListener() {
-                            return _onChange.createListenerInstance();
+                            return _onChange.createListener();
                         },
-                        createOnValidListener() {
-                            return _onValid.createListenerInstance();
-                        },
-                    }
+                    })
                 }
             },
             getProps(key, onChange) {
@@ -1038,7 +878,7 @@ export default class GroupEvent {
                             const _propV = _props[key];
                             if (_propV)
                                 onChange && onChange(value, _propV);
-                            _onChange.emitAsync(key, value);
+                            _onChange.emit(key, value);
                         }
                     },
                 }
@@ -1051,14 +891,14 @@ export default class GroupEvent {
             },
             setTaskManager(v) {
                 _taskManager = v;
-                _setTaskManager.emitAsync(v);
+                _setTaskManager.emit(v);
             },
             getTaskManager() {
                 return _taskManager;
             },
 
             async doValidation() {
-                const valid = (await _makeValidations.broadcastEmitAsync()).reduce((ac, d) => {
+                const valid = (await _makeValidations.broadcastEmit())?.reduce((ac, d) => {
                     if (!ac)
                         return false;
                     const prop = _props[d[0] as keyof Model];
@@ -1067,17 +907,19 @@ export default class GroupEvent {
                     }
                     return d[1];
                 }, true);
-                return valid;
+                if (valid != undefined)
+                    return valid;
+                throw "validations is on execution";
             },
 
-            listeners: {
+            listeners: () => ({
                 createSetTaskManagerListener() {
-                    return _setTaskManager.createListenerInstance();
+                    return _setTaskManager.createListener();
                 },
                 createValidationBroadcastListener() {
-                    return _makeValidations.createBroadcastListenerInstance();
+                    return _makeValidations.createBroadcastListener();
                 }
-            }
+            })
         }
     }
 
@@ -1087,17 +929,18 @@ export default class GroupEvent {
      * @param name 
      * @returns 
      */
-    createTimer<T extends any[] = any[]>(name: string): TimerController<T> {
+    createTimer<T extends any[] = any[], Name extends string = string>(name: Name): TimerController<T, Name> {
         let _delaypass = 0.0;
         let _totalTime = 0.0;
         let _isStopped = true;
         let _isPaused = false;
-        const _percent = this.createObservavbleControllerAsync("percent_" + name, 0.0);
-        const _timer = this.createObservavbleControllerAsync<number | undefined>("timer_" + name, undefined);
-        const _completed = this.createControllerAsync<T>("completed_" + name);
-        const _stopped = this.createControllerAsync("stopped_" + name);
-        const _started = this.createControllerAsync("started_" + name);
-        const _paused = this.createControllerAsync("paused_" + name);
+        const _percent = this.createObservavble("percent_" + name)(0.0);
+        const _timer = this.createObservavble("timer_" + name)<number | undefined>(undefined);
+        const _completed = this.createEvent("completed_" + name)<T>();
+        const _stopped = this.createEvent("stopped_" + name)();
+        const _started = this.createEvent("started_" + name)();
+        const _paused = this.createEvent("paused_" + name)();
+        const _running = this.createEvent("running_" + name)<[percent: number, total: number, stopped: boolean]>()
         // do not call functions from listener controller instances before return.
         return {
             start(time, per, onCompleted) {
@@ -1110,10 +953,10 @@ export default class GroupEvent {
                             (async () => {
                                 await _percent.next(1.0);
                                 const data = await onCompleted();
-                                await _completed.emitAsync(...data);
-                                _completed.removeAllEvents();
-                                _stopped.removeAllEvents();
-                                _paused.removeAllEvents();
+                                await _completed.emit(...data);
+                                _completed.removeEvent();
+                                _stopped.removeEvent();
+                                _paused.removeEvent();
                                 _percent.unsubscribes();
                             })();
                         } else {
@@ -1127,11 +970,11 @@ export default class GroupEvent {
                     _delaypass = 0.0;
                     _totalTime = time;
                     _timer.next(setInterval(_start, per));
-                    _started.emitAsync(_percent.get());
+                    _started.emit(_percent.get());
                 } else if (_isPaused) {
                     _isPaused = false;
                     _timer.next(setInterval(_start, per));
-                    _started.emitAsync(_percent.get());
+                    _started.emit(_percent.get());
                 }
             },
             stop() {
@@ -1140,39 +983,39 @@ export default class GroupEvent {
                     clearInterval(_timer.get());
                     _timer.next(undefined);
                     (async () => {
-                        await _stopped.emitAsync(_percent.get());
-                        _completed.removeAllEvents();
-                        _stopped.removeAllEvents();
+                        await _stopped.emit(_percent.get());
+                        _completed.removeEvent();
+                        _stopped.removeEvent();
                         _percent.unsubscribes();
                     })();
                 }
-            },
-            onRunning(key, callback) {
-                const _sub = _percent.createSubscriber(key);
-                _sub.subscribe((percent) => {
-                    callback(percent, _totalTime, !_timer.get())
-                })
-            },
-            onCompleted(key, callback) {
-                _completed.addUniqueListenerAsync(key, callback);
-            },
-            onStopped(key, callback) {
-                _stopped.addUniqueListenerAsync(key, callback);
-            },
-            onPaused(key, callback) {
-                _paused.addUniqueListenerAsync(key, callback);
-            },
-            onStarted(key, callback) {
-                _started.addUniqueListenerAsync(key, callback);
             },
             pause() {
                 if (!_isPaused && !_isStopped && _timer.get()) {
                     _isPaused = true;
                     clearInterval(_timer.get());
                     _timer.next(undefined);
-                    _stopped.emitAsync(_percent.get());
+                    _paused.emit(_percent.get())
                 }
             },
+            listeners: () => ({
+                createOnCompletedListener() {
+                    return _completed.createListener();
+                },
+                createOnPausedListener() {
+                    return _paused.createListener();
+                },
+                createOnRunningListener() {
+                    return _running.createListener();
+                },
+                createOnStartedListener() {
+                    return _started.createListener();
+                },
+                createOnStoppedListener() {
+                    return _stopped.createListener();
+                },
+            })
+
         }
     }
 
@@ -1181,7 +1024,7 @@ export default class GroupEvent {
         if (ob instanceof Array) {
             ob.forEach(event => {
                 if (event instanceof ShareEventListener) {
-                    event.removeEventListener();
+                    event.remove();
                     event = null;
                 } else this.removeAllHandlers(event);
             })
