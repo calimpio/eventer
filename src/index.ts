@@ -1,8 +1,6 @@
-// v: 3.0.2
+// v: 3.0.3
 // Ftd: (Feactures to dev)
 
-
-// Ftd: Reducir el uso de llaves string para los escuchadores lo que mas se pueda.
 
 export type ListenerController<Props extends any[], Returns = Promise<void> | void, Description = string> = {
     /**
@@ -77,6 +75,8 @@ export type EventObservableController<T, Name = string> = {
      * Eleminar todas las subcribciones
      */
     unsubscribes(): void
+
+    readOnly(): EventObservableReaderController<T, Name>
 }
 
 export interface SubscriberController<T, Name = string> {
@@ -102,6 +102,15 @@ export interface SubscriberController<T, Name = string> {
      * Obtener el valor
      */
     get(): T
+
+
+}
+
+export type SubscriberReaderController<T, Name = string> = Omit<SubscriberController<T, Name>, "next">
+
+export interface EventObservableReaderController<T, Name = string> {
+    get: EventObservableController<T, Name>["get"],
+    createSubscriber(): SubscriberReaderController<T, Name>
 }
 
 export interface ValidatorController<Model, Name extends string = string> {
@@ -429,7 +438,7 @@ export default class GroupEvent {
                 return _listener.state;
             },
             onRemoveEvent(callback) {
-                if(_listener)
+                if (_listener)
                     _listener.onRemoveEvent(callback);
             },
         }
@@ -553,13 +562,27 @@ export default class GroupEvent {
             let _value = defaultValue;
             let _subcribers: Record<string, { event: ListenerController<[value: T]> }> = {};
             // do not call functions from listener controller instances before return.
-            return {
+            const ob: EventObservableController<T, Name> = {
                 next: async (value, force) => {
                     if (value !== _value || force) {
                         _value = value;
                         await this.emitAsync(_name, _value);
                     }
                     return _value;
+                },
+                readOnly() {
+                    const { get, createSubscriber } = ob;
+                    return {
+                        get,
+                        createSubscriber() {
+                            const { subscribe, unsubscribe } = createSubscriber()
+                            return {
+                                subscribe,
+                                get,
+                                unsubscribe
+                            }
+                        },
+                    }
                 },
                 createSubscriber: (name?: string, callback?: (value: T) => Promise<void> | void, noFirstCall?: boolean, doOneTime?: boolean) => {
                     let _listener: ListenerController<[value: T]> | null | undefined = null;
@@ -626,7 +649,9 @@ export default class GroupEvent {
                     this.removeEventByName(_name);
                 },
             }
+            return ob;
         }
+
 
     }
 
@@ -826,7 +851,7 @@ export default class GroupEvent {
                             return _listener.state;
                         },
                         onRemoveEvent(callback) {
-                            if(_listener)
+                            if (_listener)
                                 _listener.onRemoveEvent(callback);
                         },
                     };
