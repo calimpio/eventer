@@ -244,10 +244,11 @@ export interface TimerController<CompleteParams extends any[] = any[], Name exte
 
 export interface EventObservableMapController<Model> {
     mount(): EventObservableMapController<Model> | void
-    get<Key extends keyof Model, TValue extends Model[Key]>(key: Key): EventObservableController<any> | undefined
-    createSubscribe<Key extends keyof Model>(key: Key): SubscriberController<Model[Key] | ObservableMapper<Model[Key]>> | undefined
+    get<Key extends keyof Model, TValue extends Model[Key]>(key: Key): ObsevavleMapTypeByKey<Model, Key, TValue> | undefined
+    createSubscribe<Key extends keyof Model, TValue extends Model[Key]>(key: Key): SubscriberMapControllerByKey<Model, Key, TValue> | undefined
     getModel(): Model | undefined
     resetFrom(model: Model): EventObservableMapController<Model>
+    getMap<Key extends keyof Model, TValue extends Model[Key]>(key: Key): ObservableMapper<TValue> | undefined
 }
 
 type EventMap = {
@@ -1088,13 +1089,26 @@ export default class GroupEvent {
 }
 
 
+type ObsevavleMapTypeByKey<T, Tkey extends keyof T, TValue extends T[Tkey]> =
+    EventObservableController<TValue extends object ?
+        (TValue extends null ? TValue :
+            (TValue extends undefined ? EventObservableController<TValue, Tkey> : ObservableMapper<TValue>))
+        : TValue, Tkey>;
 
-
+type SubscriberMapControllerByKey<T, Tkey extends keyof T, TValue extends T[Tkey]> =
+    SubscriberController<TValue extends object ?
+        (TValue extends null ? TValue :
+            (TValue extends undefined ? EventObservableController<TValue, Tkey> : ObservableMapper<TValue>))
+        : TValue, Tkey>;
 
 export class ObservableMapper<Model> implements EventObservableMapController<Model> {
 
     private events!: GroupEvent;
-    private props!: Record<PropertyKey, EventObservableController<any | ObservableMapper<any>>>
+    private props!: Record<PropertyKey, ObsevavleMapTypeByKey<Model, keyof Model, any>>
+    private internalEvents!: GroupEvent;
+    private root!: EventObservableController<ObservableMapper<Model>, "root">
+    private parent!: ObservableMapper<any>
+
     constructor(private model?: Model) {
 
     }
@@ -1105,15 +1119,26 @@ export class ObservableMapper<Model> implements EventObservableMapController<Mod
         }
     }
 
-    get<Key extends keyof Model, TValue extends Model[Key]>(key: Key) {
+    get<Key extends keyof Model, TValue extends Model[Key]>(key: Key): ObsevavleMapTypeByKey<Model, Key, TValue> | undefined {
         if (this.props) {
-            return this.props[key]
+            return (this.props[key] as ObsevavleMapTypeByKey<Model, Key, TValue>)
         }
         return undefined
     }
-    createSubscribe<Key extends keyof Model>(key: Key) {
+
+    getMap<Key extends keyof Model, TValue extends Model[Key]>(key: Key): ObservableMapper<TValue> | undefined {
         if (this.props) {
-            return this.props[key].createSubscriber()
+            const map = this.props[key].get();
+            if (map instanceof ObservableMapper) {
+                return map;
+            }
+        }
+        return undefined
+    }
+
+    createSubscribe<Key extends keyof Model, TValue extends Model[Key]>(key: Key): SubscriberMapControllerByKey<Model, Key, TValue> | undefined {
+        if (this.props) {
+            return ((this.props[key]).createSubscriber() as SubscriberMapControllerByKey<Model, Key, TValue>)
         }
         return undefined
     }
@@ -1127,7 +1152,13 @@ export class ObservableMapper<Model> implements EventObservableMapController<Mod
             this.events = new GroupEvent;
             this.props = {};
             this.model = model;
+            if (!this.parent) {
+                this.internalEvents = new GroupEvent;
+                this.root = this.internalEvents.createObservavble("root")<ObservableMapper<Model>>(this);
+            }
         }
+
+        //todo
         if (typeof model == "object" && !Array.isArray(model) && model) {
             const keys = Object.keys(model);
             for (let vk of keys) {
@@ -1135,6 +1166,7 @@ export class ObservableMapper<Model> implements EventObservableMapController<Mod
                 const value = m[vk];
                 if (typeof value == "object" && !Array.isArray(value) && value) {
                     const deep = new ObservableMapper<any>;
+                    deep.parent = this;
                     deep.resetFrom(value);
                     this.props[vk] = this.events.createObservavble(vk)(deep);
                     this.props[vk].createSubscriber().subscribe(value => {
@@ -1149,5 +1181,37 @@ export class ObservableMapper<Model> implements EventObservableMapController<Mod
             }
         }
         return this;
+    }
+
+    update(force?: boolean) {
+        if (this.props && typeof this.model == "object" && !Array.isArray(this.model) && this.model) {
+            const keys = Object.keys(this.model);
+            for (let vk of keys) {
+                const m: any = this.model;
+                const value = m[vk];
+                if (typeof value == "object" && !Array.isArray(value) && value) {
+                    this.getMap(vk as keyof Model)?.update(force);
+                } else {
+                    this.props[vk].next(value, force);
+                }
+            }
+        }
+    }
+
+
+    //todo mejorar esto, tiene que aactualizar el arbol.
+    updateFrom(model: Model, force?: boolean) {
+        if (this.props && typeof this.model == "object" && !Array.isArray(this.model) && model) {
+            const keys = Object.keys(model);
+            for (let vk of keys) {
+                const m: any = model;
+                const value = m[vk];
+                if (typeof value == "object" && !Array.isArray(value) && value) {
+                    this.getMap(vk as keyof Model)?.updateFrom(value, force);
+                } else {
+                    this.props[vk].next(value, force);
+                }
+            }
+        }
     }
 }

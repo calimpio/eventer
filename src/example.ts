@@ -138,13 +138,12 @@ try {
 
 //Mapper
 
-const myMaper = new ObservableMapper<{ k1: string, k2: boolean }>;
+const myMapper = new ObservableMapper<{ k1: string | null, k2: false, mk: { d: number } }>;
 
-myMaper.resetFrom({ k1: "", k2: false });
+myMapper.resetFrom({ k1: "", k2: false, mk: { d: 0 } });
 
-const k1ob = myMaper.get("k1");
-k1ob?.next("wow");
+const k1ob = myMapper.get("k1");
+k1ob?.next(null);
 
-k1ob?.createSubscriber().subscribe(()=>{
-    
-})
+myMapper.getMap("mk")?.resetFrom({ d: 20 });
+
