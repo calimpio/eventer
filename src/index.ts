@@ -983,94 +983,97 @@ export default class GroupEvent {
      * @param name 
      * @returns 
      */
-    createTimer<T extends any[] = any[], Name extends string = string>(name: Name): TimerController<T, Name> {
-        let _delaypass = 0.0;
-        let _totalTime = 0.0;
-        let _isStopped = true;
-        let _isPaused = false;
-        const _percent = this.createObservavble("percent_" + name)(0.0);
-        const _timer = this.createObservavble("timer_" + name)<any | undefined>(undefined);
-        const _completed = this.createEvent("completed_" + name)<T>();
-        const _stopped = this.createEvent("stopped_" + name)();
-        const _started = this.createEvent("started_" + name)();
-        const _paused = this.createEvent("paused_" + name)();
-        const _running = this.createEvent("running_" + name)<[percent: number, total: number, stopped: boolean]>()
-        // do not call functions from listener controller instances before return.
-        return {
-            start(time, per, onCompleted) {
-                const _start = () => {
-                    if (!_isPaused && !_isStopped) {
-                        _delaypass++;
-                        if (_delaypass / _totalTime >= 1) {
-                            clearInterval(_timer.get());
-                            _timer.next(undefined);
-                            (async () => {
-                                await _percent.next(1.0);
-                                const data = await onCompleted();
-                                await _completed.emit(...data);
-                                _completed.removeEvent();
-                                _stopped.removeEvent();
-                                _paused.removeEvent();
-                                _percent.unsubscribes();
-                            })();
-                        } else {
-                            _percent.next(_delaypass / time);
+    createTimer<Name extends string = string>(name: Name): <T extends any[] = any[]>() => TimerController<T, Name> {
+        return <T extends any[] = any[]>() => {
+            let _delaypass = 0.0;
+            let _totalTime = 0.0;
+            let _isStopped = true;
+            let _isPaused = false;
+            const _percent = this.createObservavble("percent_" + name)(0.0);
+            const _timer = this.createObservavble("timer_" + name)<any | undefined>(undefined);
+            const _completed = this.createEvent("completed_" + name)<T>(true);
+            const _stopped = this.createEvent("stopped_" + name)(true);
+            const _started = this.createEvent("started_" + name)(true);
+            const _paused = this.createEvent("paused_" + name)(true);
+            const _running = this.createEvent("running_" + name)<[percent: number, total: number, stopped: boolean]>(true)
+            // do not call functions from listener controller instances before return.
+            return {
+                start(time, per, onCompleted) {
+                    const _start = () => {
+                        if (!_isPaused && !_isStopped) {
+                            _delaypass++;
+                            if (_delaypass / _totalTime >= 1) {
+                                clearInterval(_timer.get());
+                                _timer.next(undefined);
+                                (async () => {
+                                    await _percent.next(1.0);
+                                    const data = await onCompleted() as any;
+                                    await _completed.emit(...data);
+                                    _completed.removeEvent();
+                                    _stopped.removeEvent();
+                                    _paused.removeEvent();
+                                    _percent.unsubscribes();
+                                })();
+                            } else {
+                                _percent.next(_delaypass / time);
+                            }
                         }
                     }
-                }
-                if (_isStopped) {
-                    _isStopped = false;
-                    _percent.next(0.0);
-                    _delaypass = 0.0;
-                    _totalTime = time;
-                    _timer.next(setInterval(_start, per));
-                    _started.emit(_percent.get());
-                } else if (_isPaused) {
-                    _isPaused = false;
-                    _timer.next(setInterval(_start, per));
-                    _started.emit(_percent.get());
-                }
-            },
-            stop() {
-                if (!_isStopped) {
-                    _isStopped = true;
-                    clearInterval(_timer.get());
-                    _timer.next(undefined);
-                    (async () => {
-                        await _stopped.emit(_percent.get());
-                        _completed.removeEvent();
-                        _stopped.removeEvent();
-                        _percent.unsubscribes();
-                    })();
-                }
-            },
-            pause() {
-                if (!_isPaused && !_isStopped && _timer.get()) {
-                    _isPaused = true;
-                    clearInterval(_timer.get());
-                    _timer.next(undefined);
-                    _paused.emit(_percent.get())
-                }
-            },
-            listeners: () => ({
-                createOnCompletedListener() {
-                    return _completed.createListener();
+                    if (_isStopped) {
+                        _isStopped = false;
+                        _percent.next(0.0);
+                        _delaypass = 0.0;
+                        _totalTime = time;
+                        _timer.next(setInterval(_start, per));
+                        _started.emit(_percent.get());
+                    } else if (_isPaused) {
+                        _isPaused = false;
+                        _timer.next(setInterval(_start, per));
+                        _started.emit(_percent.get());
+                    }
                 },
-                createOnPausedListener() {
-                    return _paused.createListener();
+                stop() {
+                    if (!_isStopped) {
+                        _isStopped = true;
+                        clearInterval(_timer.get());
+                        _timer.next(undefined);
+                        (async () => {
+                            await _stopped.emit(_percent.get());
+                            _completed.removeEvent();
+                            _stopped.removeEvent();
+                            _percent.unsubscribes();
+                        })();
+                    }
                 },
-                createOnRunningListener() {
-                    return _running.createListener();
+                pause() {
+                    if (!_isPaused && !_isStopped && _timer.get()) {
+                        _isPaused = true;
+                        clearInterval(_timer.get());
+                        _timer.next(undefined);
+                        _paused.emit(_percent.get())
+                    }
                 },
-                createOnStartedListener() {
-                    return _started.createListener();
-                },
-                createOnStoppedListener() {
-                    return _stopped.createListener();
-                },
-            })
+                listeners: () => ({
+                    createOnCompletedListener() {
+                        return _completed.createListener();
+                    },
+                    createOnPausedListener() {
+                        return _paused.createListener();
+                    },
+                    createOnRunningListener() {
+                        return _running.createListener();
+                    },
+                    createOnStartedListener() {
+                        return _started.createListener();
+                    },
+                    createOnStoppedListener() {
+                        return _stopped.createListener();
+                    },
+                })
 
+            }
         }
+
     }
 
 
@@ -1149,7 +1152,7 @@ export class ObservableMapper<Model> implements EventObservableMapController<Mod
     }
 
     resetFrom(model: Model): EventObservableMapController<Model> {
-        if (model) {           
+        if (model) {
             this.model = model;
             if (!this.parent) {
                 this.internalEvents = new GroupEvent;

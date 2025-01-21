@@ -160,3 +160,48 @@ const mkDsub = mkMapper.createSubscribe("d");
 
 
 myMapper.updateFrom({ k1: "", k2: false, mk: { d: 0 } });
+
+
+//loader
+class MyModelService {
+    private static events = new GroupEvent;
+
+    private static getModelLoader = this.events.createLoader("getModel", async () => {
+        //get something from api       
+        return await new Promise<string>((res) => {
+            setTimeout(() => res("hola mundo"), 200);
+        })
+    });
+
+    public static getModel = this.getModelLoader.exec;
+    public static createGetModelonDone = this.getModelLoader.listeners().createOnDoneListener
+    public static createGetModelOnError = this.getModelLoader.listeners().createOnErrorListener
+}
+
+const onGetModel = MyModelService.createGetModelonDone()
+
+onGetModel.on((data) => {
+    console.log(data);
+})
+
+MyModelService.getModel();//run
+MyModelService.getModel();//no run
+MyModelService.getModel();//no run
+
+
+//timers
+const myTime = events.createTimer("mytime")<[data: string]>();
+
+myTime.start(2000, 1, () => {
+    return ["hola mundo"];
+})
+
+const onCompleted = myTime.listeners().createOnCompletedListener();
+onCompleted.on((data) => {
+    console.log(data); // hola mundo
+});
+
+const onProgress = myTime.listeners().createOnRunningListener();
+onProgress.on((porcent, total, isStopped) => {
+    console.log(porcent);
+})
