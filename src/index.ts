@@ -211,6 +211,12 @@ export interface LoaderController<Props extends any[], T, Description extends st
          */
         createOnErrorListener(): ListenerController<[error: any], void | Promise<void>, `On task error of ${Description}`>
     }
+
+    readOnly(): {
+        isLoading(): boolean
+        listeners: LoaderController<Props, T, Description>["listeners"]
+        exec: LoaderController<Props, T, Description>["exec"]
+    }
 }
 
 export interface TaskManager<TKey extends string | number = string, Name extends string = string> {
@@ -681,7 +687,7 @@ export default class GroupEvent {
         const _data = events.createEvent("_data")<[T]>(true);
 
         // do not call functions from listener controller instances before return.
-        return {
+        const laoder: LoaderController<Props, T, Name> = {
             exec: async (...props: Props) => {
                 if (!_loadState.get()) {
                     _loadState.next(true);
@@ -717,8 +723,14 @@ export default class GroupEvent {
                     // do not call functions from listener controller instances before return.
                     return _data.createListener();
                 },
+            }),
+            readOnly: () => ({
+                exec: laoder.exec,
+                isLoading: laoder.isLoading,
+                listeners: laoder.listeners,
             })
         };
+        return laoder;
     }
 
 

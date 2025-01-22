@@ -166,27 +166,25 @@ myMapper.updateFrom({ k1: "", k2: false, mk: { d: 0 } });
 class MyModelService {
     private static events = new GroupEvent;
 
-    private static getModelLoader = this.events.createLoader("getModel", async () => {
+    public static getModelLoader = this.events.createLoader("getModel", async (/** define your params */) => {
         //get something from api       
         return await new Promise<string>((res) => {
             setTimeout(() => res("hola mundo"), 200);
         })
-    });
+    }).readOnly();//the task could not be set.
 
-    public static getModel = this.getModelLoader.exec;
-    public static createGetModelonDone = this.getModelLoader.listeners().createOnDoneListener
-    public static createGetModelOnError = this.getModelLoader.listeners().createOnErrorListener
+
 }
 
-const onGetModel = MyModelService.createGetModelonDone()
+const onGetModel = MyModelService.getModelLoader.listeners().createOnDoneListener();
 
 onGetModel.on((data) => {
     console.log(data);
 })
 
-MyModelService.getModel();//run
-MyModelService.getModel();//no run
-MyModelService.getModel();//no run
+MyModelService.getModelLoader.exec();//run
+MyModelService.getModelLoader.exec();//no run
+MyModelService.getModelLoader.exec();//no run
 
 
 //timers
