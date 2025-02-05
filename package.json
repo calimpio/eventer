@@ -1,8 +1,9 @@
 {
   "name": "eventer",
-  "version": "3.0.7",
+  "version": "3.0.8",
   "description": "Libreria para gestionar eventos en las apps",
   "main": "./src/index.ts",
+  "type": "module",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },

@@ -1,6 +1,6 @@
 import React, { FunctionComponent, useEffect, useState } from "react";
 import * as Rdom from "react-dom"
-import GroupEvent, { EventController } from ".";
+import GroupEvent, { EventController } from "..";
 
 interface ListnerExampleProps {
     changeTitle: EventController<[data: string]>

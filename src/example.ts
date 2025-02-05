@@ -1,4 +1,4 @@
-import GroupEvent, { ObservableMapper } from ".";
+import GroupEvent, { ObservableMapper } from "..";
 //EventGroup instance
 
 const events = new GroupEvent;

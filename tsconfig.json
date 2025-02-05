@@ -22,7 +22,8 @@
         "allowImportingTsExtensions": true
     },
     "include": [
-        "src"
+        "src",
+        "index.ts"
     ],
     "references": [],
     "ts-node": {
