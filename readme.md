@@ -213,7 +213,7 @@ Retorna una tupla `[value, next]`:
 ### Ejemplo de Uso
 
 ```typescript
-import { useObservableData } from "./your-hooks-file";
+import { useObservableData } from "eventer/react-eventer";
 import { userNameObservable } from "./your-events-file";
 
 function UserProfileEditor() {
@@ -346,7 +346,122 @@ Proporciona una estructura para la **validación de modelos de formularios**, in
 
       * **`createSetTaskManagerListener()`**: Cuando se establece el `TaskManager`.
       * **`createValidationBroadcastListener()`**: Se utiliza internamente para las validaciones.
+#### Ejemplo de uso:
 
+```typescript
+import React, { useState, useEffect } from 'react';
+import { ValidatorController } from 'eventer';
+import { useListener, useObservable } from 'eventer/react-eventer';
+
+interface InputProps<T extends object> {
+    /**
+     * El modelo de datos (opcional si el validador ya lo tiene, 
+     * pero útil para inicializar el estado local)
+     */
+    model: T;
+    /**
+     * La clave de la propiedad en el modelo que este input controla
+     */
+    modelKey: keyof T;
+    /**
+     * La instancia del controlador de validación
+     */
+    validator: ValidatorController<T>;
+    label: string;
+    type?: string;
+    placeholder?: string;
+}
+
+export const Input = <T extends object>({ 
+    model, 
+    modelKey, 
+    validator, 
+    label, 
+    type = "text",
+    placeholder 
+}: InputProps<T>) => {
+    // Estado local para el valor y el error
+    const [value, setValue] = useState<any>(model[modelKey] || "");
+    const [error, setError] = useState<string | null>(null);
+
+    // 1. Implementación de useListener para validaciones
+    // Escuchamos el evento broadcast de validación. Cuando validator.doValidation() se ejecute,
+    // este callback será invocado.
+    useListener(
+        validator.listeners().createValidationBroadcastListener, 
+        async () => {
+            let isValid = true;
+            let errorMessage = null;
+
+            // Lógica de validación personalizada para este input
+            // Ejemplo: Validar que no esté vacío
+            if (!value || (typeof value === 'string' && value.trim() === "")) {
+                isValid = false;
+                errorMessage = `${label} es requerido`;
+            }
+
+            // Actualizamos el estado visual del error
+            setError(errorMessage);
+
+            // Retornamos la tupla [clave, esValido] como espera el ValidatorController
+            // Esto permite al validador saber qué campo es y si pasó la prueba
+            return [modelKey, isValid];
+        }
+    );
+
+    // 2. Implementación de suscriptores de estado del formulario
+    // Usamos useObservable para suscribirnos al estado 'disabled' del formulario.
+    // Si validator.getEvents().setDisabled(true) es llamado, este componente se actualizará.
+    const [isDisabled] = useObservable(
+        validator.getEvents().subscribers().createDisabledSubscriber
+    );
+
+    // 3. Vinculación con el validador para notificar cambios
+    // Obtenemos la función onChange del validador para mantener el modelo sincronizado
+    const { onChange: notifyValidator } = validator.getProps(modelKey);
+
+    const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const newValue = e.target.value;
+        
+        // Actualizamos estado local
+        setValue(newValue);
+        
+        // Notificamos al validador (esto actualiza el modelo interno del validador y emite eventos onChange)
+        notifyValidator(newValue);
+        
+        // Limpiamos el error mientras el usuario escribe
+        if (error) setError(null);
+    };
+
+    return (
+        <div className="input-container" style={{ marginBottom: '1rem' }}>
+            <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 'bold' }}>
+                {label}
+            </label>
+            <input
+                type={type}
+                value={value}
+                onChange={handleChange}
+                disabled={isDisabled}
+                placeholder={placeholder}
+                style={{
+                    width: '100%',
+                    padding: '8px',
+                    borderRadius: '4px',
+                    border: `1px solid ${error ? 'red' : '#ccc'}`,
+                    backgroundColor: isDisabled ? '#f5f5f5' : 'white',
+                    cursor: isDisabled ? 'not-allowed' : 'text'
+                }}
+            />
+            {error && (
+                <span style={{ color: 'red', fontSize: '0.85rem', marginTop: '4px', display: 'block' }}>
+                    {error}
+                </span>
+            )}
+        </div>
+    );
+};
+```
 -----
 
 ### 8\. `TimerController<CompleteParams, Name>`
@@ -407,8 +522,8 @@ Retorna una tupla con tres elementos:
 
 ```typescript
 import { useEffect, useState } from "react";
-import { eventer } from "../utilities/eventer";
-import { useObservable } from "./your-hooks-file";
+import { eventer } from "eventer";
+import { useObservable } from "eventer/react-eventer";
 
 const appEvents = eventer();
 const userNameObservable = appEvents.createObservable("userName")("Invitado");
@@ -447,8 +562,8 @@ Este hook permite a un componente de React **escuchar eventos** creados con `Eve
 ### Ejemplo de Uso
 
 ```typescript
-import { eventer } from "../utilities/eventer";
-import { useListener } from "./your-hooks-file";
+import { eventer } from "eventer";
+import { useListener } from "eventer/react-eventer";
 
 const appEvents = eventer();
 const userSavedEvent = appEvents.createEvent("userSaved")<[userId: string]>();
@@ -485,7 +600,7 @@ Este hook proporciona acceso a una instancia global de **`TaskManager`**, precon
 ### Ejemplo de Uso
 
 ```typescript
-import { useGlobalTaskManager } from "./your-hooks-file";
+import { useGlobalTaskManager } from "eventer/react-eventer";
 
 function TaskProgressMonitor() {
     const globalTaskManager = useGlobalTaskManager();
@@ -524,7 +639,7 @@ Este hook permite **crear una tarea asíncrona** y añadirla a la instancia glob
 ### Ejemplo de Uso
 
 ```typescript
-import { useTask, useGlobalTaskManager } from "./your-hooks-file";
+import { useTask, useGlobalTaskManager } from "eventer/react-eventer";
 
 function DataSyncComponent() {
     const globalTaskManager = useGlobalTaskManager();
