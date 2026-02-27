@@ -2,11 +2,21 @@
 
 -----
 
-<img src="./eventer_logo.svg" width="60%" style="display: flex; aling-items: center; justify-content: center; margin: auto;">
+<img src="./eventer_logo.svg" width="60%" style="display: flex; aling-items: center; justify-content: center; margin: auto; border-radius: 5%">
 
 # Documentación de la Librería Eventer
 
 Eventer es una librería de gestión de eventos robusta y versátil para TypeScript, diseñada para actuar como un **orquestador de lógica de aplicación**. Facilita la comunicación entre componentes, la gestión de estados reactivos y la orquestación de tareas asíncronas en aplicaciones JavaScript. Proporciona una API rica y tipada que abarca desde eventos simples hasta patrones más complejos como observables, loaders, managers de tareas y validadores de formularios, e incluye hooks de React para una integración fluida.
+
+## ¿Por qué usar Eventer?
+
+Eventer es ideal para desacoplar la lógica de negocio de la interfaz de usuario o de la infraestructura específica. Su diseño agnóstico y basado en eventos lo hace perfecto para:
+
+*   **Crear SDKs**: Encapsula la lógica compleja y expón una API limpia basada en eventos para que los consumidores se suscriban a cambios o resultados sin conocer los detalles internos.
+*   **Desarrollo de CLIs**: Gestiona flujos de trabajo asíncronos, barras de progreso y tareas secuenciales en herramientas de línea de comandos de forma ordenada.
+*   **Componentes de React**: Construye componentes que reaccionan a cambios de estado complejos o eventos globales sin prop drilling excesivo o contextos pesados.
+*   **Micro-frontends**: Facilita la comunicación entre diferentes partes de una aplicación distribuida sin acoplamiento directo.
+*   **Gestión de Formularios Complejos**: Orquesta validaciones asíncronas, dependencias entre campos y estados de UI (loading, disabled) de manera centralizada.
 
 -----
 
