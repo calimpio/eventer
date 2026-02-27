@@ -11,6 +11,21 @@ export function eventer() {
     return new GroupEvent;
 }
 
+export type EventOptions = {
+    onError?: 'break' | 'continue';
+}
+
+export type EmitResult<T> = {
+    success: boolean;
+    errors: EventErrorContext[];
+    results?: T[];
+}
+
+export interface EventErrorContext {
+    eventName: string;
+    params: any[];
+    originalError: any;
+}
 
 export type ListenerController<Props extends any[], Returns = Promise<void> | void, Description = string> = {
     /**
@@ -26,7 +41,7 @@ export type ListenerController<Props extends any[], Returns = Promise<void> | vo
     /**
      * Estado del escuchador
      */
-    state: Readonly<"idle" | "removed" | "running" | "willRemove" | "desattached" | "willAttach">
+    state: Readonly<"idle" | "removed" | "running" | "willRemove" | "detached" | "willAttach">
 
     /**
      * Se ejecuta cuando el evento es eliminado
@@ -35,7 +50,7 @@ export type ListenerController<Props extends any[], Returns = Promise<void> | vo
     onRemoveEvent(callback: () => void): void
 }
 
-export type EventBrocastController<Props extends any[], Returns, Name = string> = {
+export type EventBroadcastController<Props extends any[], Returns, Name = string> = {
     /**
      * Crear un escuchador para el broadcast
      */
@@ -45,6 +60,16 @@ export type EventBrocastController<Props extends any[], Returns, Name = string> 
      * @param params 
      */
     broadcastEmit: (...params: Props) => Promise<Returns[] | undefined>;
+    /**
+     * Emitir el evento broadcast en paralelo y esperar las respuestas de los escuchadores
+     * @param params 
+     */
+    broadcastEmitParallel: (...params: Props) => Promise<Returns[] | undefined>;
+    /**
+     * Emitir el evento broadcast de forma segura, devolviendo un reporte de estado con resultados y errores.
+     * @param params 
+     */
+    broadcastEmitSettled: (...params: Props) => Promise<EmitResult<Returns>>;
 }
 
 export type EventController<Props extends any[] = [], Name = string> = {
@@ -60,6 +85,18 @@ export type EventController<Props extends any[] = [], Name = string> = {
      * @returns 
      */
     emit: (...params: Props) => Promise<void>;
+    /**
+     * Emitir evento en paralelo
+     * 
+     * @param params 
+     * @returns 
+     */
+    emitParallel: (...params: Props) => Promise<void>;
+    /**
+     * Emitir evento de forma segura, devolviendo un reporte de estado con errores si los hubo.
+     * @param params 
+     */
+    emitSettled: (...params: Props) => Promise<EmitResult<void>>;
     /**
      * Borrar todos los escucahdores
      */
@@ -607,7 +644,7 @@ export default class GroupEvent {
                 if (_listener == null)
                     return "willAttach";
                 if (_listener == undefined)
-                    return "desattached";
+                    return "detached";                
                 return _listener.state;
             },
             onRemoveEvent(callback) {
@@ -622,24 +659,74 @@ export default class GroupEvent {
         return this.createListenerInstance("b_" + name.toString(), withRemovedSolution);
     }
 
-    private async emitAsync(name: PropertyKey, ...params: any[]) {
+    private async emitAsync(name: PropertyKey, options: EventOptions | undefined, ...params: any[]): Promise<EventErrorContext[]> {
         const _name = this.tag + name.toString();
+        const errors: EventErrorContext[] = [];
         if (!this.events[_name]) this.events[_name] = [];
         if (this.isDebugModeOn) console.info('emit: ' + name.toString() + " execs: " + this.events[_name]?.length);
         if (!this.isExec[_name]) {
             this.isExec[_name] = true;
-            await this.events[_name]?.reduce(async (ac, listener) => {
-                await ac;
-                await !listener.willRemove && listener?.run(...(params as []));
-            }, Promise.resolve())
-            this.isExec[_name] = false;
-            GroupEvent.removeAllHandlers(this.removeEvents);
-            if (this.doAfterExec[_name]) {
-                this.doAfterExec[_name].forEach(d => d());
+            try {
+                await this.events[_name]?.reduce(async (ac, listener) => {
+                    await ac;
+                    if (!listener.willRemove) {
+                        try {
+                            await listener.run(...(params as []));
+                        } catch (e) {
+                            if (options?.onError === 'continue') {
+                                errors.push({ eventName: name.toString(), params, originalError: e });
+                            } else {
+                                throw e;
+                            }
+                        }
+                    }
+                }, Promise.resolve())
+            } finally {
+                this.isExec[_name] = false;
+                GroupEvent.removeAllHandlers(this.removeEvents);
+                if (this.doAfterExec[_name]) {
+                    this.doAfterExec[_name].forEach(d => d());
+                }
+                this.doAfterExec[_name] = [];
+                this.removeEvents = [];
             }
-            this.doAfterExec[_name] = [];
-            this.removeEvents = [];
         }
+        return errors;
+    }
+
+    private async emitParallelAsync(name: PropertyKey, options: EventOptions | undefined, ...params: any[]): Promise<EventErrorContext[]> {
+        const _name = this.tag + name.toString();
+        const errors: EventErrorContext[] = [];
+        if (!this.events[_name]) this.events[_name] = [];
+        if (this.isDebugModeOn) console.info('emit parallel: ' + name.toString() + " execs: " + this.events[_name]?.length);
+        if (!this.isExec[_name]) {
+            this.isExec[_name] = true;
+            try {
+                const promises = this.events[_name]?.map(async (listener) => {
+                    if (!listener.willRemove) {
+                        try {
+                            await listener.run(...(params as []));
+                        } catch (e) {
+                            if (options?.onError === 'continue') {
+                                errors.push({ eventName: name.toString(), params, originalError: e });
+                            } else {
+                                throw e;
+                            }
+                        }
+                    }
+                }) || [];
+                await Promise.all(promises);
+            } finally {
+                this.isExec[_name] = false;
+                GroupEvent.removeAllHandlers(this.removeEvents);
+                if (this.doAfterExec[_name]) {
+                    this.doAfterExec[_name].forEach(d => d());
+                }
+                this.doAfterExec[_name] = [];
+                this.removeEvents = [];
+            }
+        }
+        return errors;
     }
 
     private removeEventByName(name: PropertyKey) {
@@ -656,28 +743,78 @@ export default class GroupEvent {
         }
     }
 
-    private async broadcastEmitAsync<Props extends any[], Returns>(name: PropertyKey, ...params: Props): Promise<Returns[] | undefined> {
+    private async broadcastEmitAsync<Props extends any[], Returns>(name: PropertyKey, options: EventOptions | undefined, ...params: Props): Promise<{ results: Returns[], errors: EventErrorContext[] } | undefined> {
         const _name = this.tag + 'b_' + name.toLocaleString();
+        const errors: EventErrorContext[] = [];
         if (!this.events[_name]) this.events[_name] = [];
         if (this.isDebugModeOn) console.info('broadcsat emit: ' + name.toString() + " execs: " + this.events[_name]?.length);
         if (!this.isExec[_name]) {
             this.isExec[_name] = true;
-            const result = await this.events[_name]?.reduce(async (ac, listener) => {
-                const list = await ac;
-                if (!listener.willRemove) {
-                    let data = (await listener.run(...(params as any[]))) as Returns;
-                    list.push(data);
+            let result: Returns[] = [];
+            try {
+                result = await this.events[_name]?.reduce(async (ac, listener) => {
+                    const list = await ac;
+                    if (!listener.willRemove) {
+                        try {
+                            let data = (await listener.run(...(params as any[]))) as Returns;
+                            list.push(data);
+                        } catch (e) {
+                            if (options?.onError === 'continue') {
+                                errors.push({ eventName: name.toString(), params, originalError: e });
+                            } else {
+                                throw e;
+                            }
+                        }
+                    }
+                    return list;
+                }, Promise.resolve<Returns[]>([]));
+            } finally {
+                this.isExec[_name] = false;
+                GroupEvent.removeAllHandlers(this.removeEvents);
+                if (this.doAfterExec[_name]) {
+                    this.doAfterExec[_name].forEach(d => d());
                 }
-                return list;
-            }, Promise.resolve<Returns[]>([]));
-            this.isExec[_name] = false;
-            GroupEvent.removeAllHandlers(this.removeEvents);
-            if (this.doAfterExec[_name]) {
-                this.doAfterExec[_name].forEach(d => d());
+                this.doAfterExec[_name] = [];
+                this.removeEvents = [];
             }
-            this.doAfterExec[_name] = [];
-            this.removeEvents = [];
-            return result;
+            return { results: result, errors };
+        }
+    }
+
+    private async broadcastEmitParallelAsync<Props extends any[], Returns>(name: PropertyKey, options: EventOptions | undefined, ...params: Props): Promise<{ results: Returns[], errors: EventErrorContext[] } | undefined> {
+        const _name = this.tag + 'b_' + name.toLocaleString();
+        const errors: EventErrorContext[] = [];
+        if (!this.events[_name]) this.events[_name] = [];
+        if (this.isDebugModeOn) console.info('broadcast emit parallel: ' + name.toString() + " execs: " + this.events[_name]?.length);
+        if (!this.isExec[_name]) {
+            this.isExec[_name] = true;
+            let result: Returns[] = [];
+            try {
+                const activeListeners = this.events[_name]?.filter(l => !l.willRemove) || [];
+                const promises = activeListeners.map(async (listener) => {
+                    try {
+                        return (await listener.run(...(params as any[]))) as Returns;
+                    } catch (e) {
+                        if (options?.onError === 'continue') {
+                            errors.push({ eventName: name.toString(), params, originalError: e });
+                            return undefined;
+                        } else {
+                            throw e;
+                        }
+                    }
+                });
+                const resultsMaybeUndefined = await Promise.all(promises);
+                result = resultsMaybeUndefined.filter(r => r !== undefined) as Returns[];
+            } finally {
+                this.isExec[_name] = false;
+                GroupEvent.removeAllHandlers(this.removeEvents);
+                if (this.doAfterExec[_name]) {
+                    this.doAfterExec[_name].forEach(d => d());
+                }
+                this.doAfterExec[_name] = [];
+                this.removeEvents = [];
+            }
+            return { results: result, errors };
         }
     }
 
@@ -688,7 +825,7 @@ export default class GroupEvent {
      * @param name 
      * @returns 
      */
-    createEvent<Name extends PropertyKey>(name: Name) {
+    createEvent<Name extends PropertyKey>(name: Name, options?: EventOptions) {
         // do not call functions from listener controller instances before return.
         return <Props extends any[]>(withRemovedSolution?: boolean): EventController<Props, Name> => {
             // do not call functions from listener controller instances before return.
@@ -698,7 +835,24 @@ export default class GroupEvent {
                     return this.createListenerInstance(name, withRemovedSolution);
                 },
                 emit: async (...params: Props) => {
-                    await this.emitAsync(name, ...params);
+                    await this.emitAsync(name, options, ...params);
+                },
+                emitParallel: async (...params: Props) => {
+                    await this.emitParallelAsync(name, options, ...params);
+                },
+                emitSettled: async (...params: Props) => {
+                    try {
+                        const errors = await this.emitAsync(name, options, ...params);
+                        return {
+                            success: errors.length === 0,
+                            errors
+                        };
+                    } catch (e) {
+                        return {
+                            success: false,
+                            errors: [{ eventName: name.toString(), params, originalError: e }]
+                        };
+                    }
                 },
                 removeEvent: () => {
                     this.removeEventByName(name);
@@ -707,16 +861,36 @@ export default class GroupEvent {
         }
     }
 
-    createBroadcast<Name extends string = string>(name: Name) {
+    createBroadcast<Name extends string = string>(name: Name, options?: EventOptions) {
         // do not call functions from listener controller instances before return.
-        return <Props extends any[], Returns extends any>(withRemovedSolution?: boolean): EventBrocastController<Props, Returns, Name> => {
+        return <Props extends any[], Returns extends any>(withRemovedSolution?: boolean): EventBroadcastController<Props, Returns, Name> => {
             return {
                 createBroadcastListener: () => {
                     // do not call functions from listener controller instances before return.
                     return this.createBroadcastListenerInstancer(name, withRemovedSolution);
                 },
-                broadcastEmit: (...params: Props) => {
-                    return this.broadcastEmitAsync(name, ...params);
+                broadcastEmit: async (...params: Props) => {
+                    const response = await this.broadcastEmitAsync<Props, Returns>(name, options, ...params);
+                    return response?.results;
+                },
+                broadcastEmitParallel: async (...params: Props) => {
+                    const response = await this.broadcastEmitParallelAsync<Props, Returns>(name, options, ...params);
+                    return response?.results;
+                },
+                broadcastEmitSettled: async (...params: Props) => {
+                    try {
+                        const response = await this.broadcastEmitAsync<Props, Returns>(name, options, ...params);
+                        return {
+                            success: (response?.errors.length || 0) === 0,
+                            results: response?.results,
+                            errors: response?.errors || []
+                        };
+                    } catch (e) {
+                        return {
+                            success: false,
+                            errors: [{ eventName: name.toString(), params, originalError: e }]
+                        };
+                    }
                 },
             }
         }
@@ -728,7 +902,7 @@ export default class GroupEvent {
      * @param name      * 
      * @returns 
      */
-    createObservavble<Name extends string = string>(name: Name) {
+    createObservable<Name extends string = string>(name: Name) {
         // do not call functions from listener controller instances before return.
         return <T>(defaultValue: T): EventObservableController<T, Name> => {
             const _name = this.tag + "ob_" + name;
@@ -739,7 +913,7 @@ export default class GroupEvent {
                 next: async (value, force) => {
                     if (value !== _value || force) {
                         _value = value;
-                        await this.emitAsync(_name, _value);
+                        await this.emitAsync(_name, undefined, _value);
                     }
                     return _value;
                 },
@@ -809,7 +983,7 @@ export default class GroupEvent {
                         next: async (value, force) => {
                             if (_value !== value || force) {
                                 _value = value;
-                                await this.emitAsync(_name, _value)
+                                await this.emitAsync(_name, undefined, _value)
                             }
                             return _value;
                         },
@@ -867,8 +1041,8 @@ export default class GroupEvent {
      */
     createLoader<Props extends any[], T, Name extends string = string>(name: Name, task: (...props: Props) => Promise<T>): LoaderController<Props, T, Name> {
         const events = new GroupEvent;
-        const _loadState = events.createObservavble("_loading")(false);
-        const _taskOb = events.createObservavble("_task")<(...props: Props) => Promise<T>>(task);
+        const _loadState = events.createObservable("_loading")(false);
+        const _taskOb = events.createObservable("_task")<(...props: Props) => Promise<T>>(task);
         const _error = events.createEvent("_error")<[error: any]>(true);
         const _data = events.createEvent("_data")<[T]>(true);
 
@@ -1024,7 +1198,9 @@ export default class GroupEvent {
                     // do not call functions from listener controller instances before return.
                     return forEachTasksError.createListener();
                 },
-                createOnTaskDoneListener: (key) => {
+                
+                
+                createOnTaskDoneListener: (key)=>{
                     let _listener: ListenerController<[any]> | undefined | null;
                     let _willMount: ListenerController<[string]> | undefined;
                     let _callback: ((data: any) => void | Promise<void>) | undefined;
@@ -1077,7 +1253,7 @@ export default class GroupEvent {
                             if (_listener == null)
                                 return "willAttach";
                             if (_listener == undefined)
-                                return "desattached";
+                                return "detached";
                             return _listener.state;
                         },
                         onRemoveEvent(callback) {
@@ -1122,10 +1298,10 @@ export default class GroupEvent {
         const _joins: Record<string, ListenerController<[], [PropertyKey, boolean] | Promise<[PropertyKey, boolean]>, string>> = {};
         const _validatorJoins: Record<string, ValidatorController<any>> = {};
         const _setTaskManager = this.createEvent("setTaskManager." + name)<[taskManager: TaskManager | null]>();
-        const _makeValidations = this.createBroadcast("dovalidation." + name)<[], [PropertyKey, boolean]>();
+        const _makeValidations = this.createBroadcast("dovalidation." + name)<[], [PropertyKey, boolean] | Promise<[PropertyKey, boolean]>>();
         const _onChange = this.createEvent("on-change." + name)<[key: keyof Model, value: any]>();
-        const _disabled = this.createObservavble("disabled" + name)<boolean>(false);
-        const _focused = this.createObservavble("focused" + name)<boolean>(false);
+        const _disabled = this.createObservable("disabled" + name)<boolean>(false);
+        const _focused = this.createObservable("focused" + name)<boolean>(false);
         let _model: Model | undefined;
 
         const _forAllValidatorsJoined = async (callback: (validator: ValidatorController<any>) => Promise<void> | void) => {
@@ -1220,11 +1396,13 @@ export default class GroupEvent {
             },
 
             async doValidation() {
-                const valid = (await _makeValidations.broadcastEmit())?.reduce((ac, d) => {
-                    if (!ac)
+                const valid = (await _makeValidations.broadcastEmit())?.reduce(async (ac, d) => {
+                    const data = await ac;
+                    const next = await d;
+                    if (!data)
                         return false;
-                    return d[1];
-                }, true);
+                    return next[1];
+                }, Promise.resolve(true));
                 if (valid != undefined)
                     return valid;
                 throw "validations is on execution";
@@ -1253,8 +1431,8 @@ export default class GroupEvent {
             let _totalTime = 0.0;
             let _isStopped = true;
             let _isPaused = false;
-            const _percent = this.createObservavble("percent_" + name)(0.0);
-            const _timer = this.createObservavble("timer_" + name)<any | undefined>(undefined);
+            const _percent = this.createObservable("percent_" + name)(0.0);
+            const _timer = this.createObservable("timer_" + name)<any | undefined>(undefined);
             const _completed = this.createEvent("completed_" + name)<T>(true);
             const _stopped = this.createEvent("stopped_" + name)(true);
             const _started = this.createEvent("started_" + name)(true);

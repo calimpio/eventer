@@ -1,17 +1,17 @@
-Aquí tienes la documentación completa y unificada de la librería Eventer, incluyendo los hooks de React.
+
 
 -----
 
 # Documentación de la Librería Eventer
 
-Eventer es una librería de gestión de eventos robusta y versátil para TypeScript, diseñada para facilitar la comunicación entre componentes, la gestión de estados reactivos y la orquestación de tareas asíncronas en aplicaciones JavaScript. Proporciona una API rica y tipada que abarca desde eventos simples hasta patrones más complejos como observables, loaders, managers de tareas y validadores de formularios, e incluye hooks de React para una integración fluida.
+Eventer es una librería de gestión de eventos robusta y versátil para TypeScript, diseñada para actuar como un **orquestador de lógica de aplicación**. Facilita la comunicación entre componentes, la gestión de estados reactivos y la orquestación de tareas asíncronas en aplicaciones JavaScript. Proporciona una API rica y tipada que abarca desde eventos simples hasta patrones más complejos como observables, loaders, managers de tareas y validadores de formularios, e incluye hooks de React para una integración fluida.
 
 -----
 
 ## Instalación
 
 ```bash
-npm install eventer
+npm i @calimpio/eventer
 ```
 
 -----
@@ -55,6 +55,11 @@ Permite crear y gestionar **eventos unidireccionales**. Son útiles para notific
     const userLoggedIn = appEvents.createEvent("userLoggedIn")<[userId: string, userName: string]>();
     ```
 
+    También puedes configurar opciones de manejo de errores:
+    ```typescript
+    const safeEvent = appEvents.createEvent("safeEvent", { onError: 'continue' })<[]>();
+    ```
+
   * **`createListener(): ListenerController<Props, Promise<void> | void, Name>`**: Crea un escuchador único para este evento.
 
     ```typescript
@@ -69,11 +74,26 @@ Permite crear y gestionar **eventos unidireccionales**. Son útiles para notific
     await userLoggedIn.emit("123", "Alice");
     ```
 
+  * **`emitParallel(...params: Props): Promise<void>`**: Emite el evento, ejecutando todos sus escuchadores en paralelo.
+
+    ```typescript
+    await userLoggedIn.emitParallel("123", "Alice");
+    ```
+
+  * **`emitSettled(...params: Props): Promise<EmitResult<void>>`**: Emite el evento de forma segura, capturando errores sin detener la ejecución (dependiendo de la configuración) y devolviendo un reporte.
+
+    ```typescript
+    const result = await userLoggedIn.emitSettled("123", "Alice");
+    if (!result.success) {
+        console.error("Errores ocurridos:", result.errors);
+    }
+    ```
+
   * **`removeEvent(): void`**: Elimina **todos** los escuchadores asociados a este evento.
 
 -----
 
-### 3\. `EventBrocastController<Props, Returns, Name>`
+### 3\. `EventBroadcastController<Props, Returns, Name>`
 
 Similar a `EventController`, pero permite que los escuchadores **devuelvan un valor**, y `broadcastEmit` recopila todas estas respuestas. Ideal para validaciones o consultas distribuidas.
 
@@ -99,16 +119,28 @@ Similar a `EventController`, pero permite que los escuchadores **devuelvan un va
     console.log("Resultados de validación:", results); // [true]
     ```
 
+  * **`broadcastEmitParallel(...params: Props): Promise<Returns[] | undefined>`**: Emite el evento en paralelo y devuelve un array con los resultados de cada escuchador.
+
+    ```typescript
+    const results = await validateForm.broadcastEmitParallel({ name: "Juan", age: 30 });
+    ```
+
+  * **`broadcastEmitSettled(...params: Props): Promise<EmitResult<Returns>>`**: Emite el evento y devuelve un objeto con los resultados y los errores capturados, útil para cuando algunos escuchadores pueden fallar pero se necesitan los resultados de los que tuvieron éxito.
+
+    ```typescript
+    const { results, errors } = await validateForm.broadcastEmitSettled({ ... });
+    ```
+
 -----
 
 ### 4\. `EventObservableController<T, Name>`
 
 Implementa un patrón **observable**, permitiendo que un valor sea observado y notifique a los suscriptores cuando cambie. Es similar a un `Subject` de RxJS.
 
-  * **`createObservavble<Name extends string>(name: Name)`**: Crea una factoría para un observable.
+  * **`createObservable<Name extends string>(name: Name)`**: Crea una factoría para un observable.
 
     ```typescript
-    const currentTheme = appEvents.createObservavble("theme")("light"); // Valor inicial "light"
+    const currentTheme = appEvents.createObservable("theme")("light"); // Valor inicial "light"
     ```
 
   * **`next(value: T, force?: boolean): Promise<T>`**: Modifica el valor del observable y emite un evento si el nuevo valor es diferente al anterior (o si `force` es `true`).
@@ -158,6 +190,46 @@ Controla una suscripción individual a un observable.
         return <div>Tema actual: {currentTheme.get()}</div>;
     }
     ```
+
+-----
+
+### 2\. `useObservableData<T>(observable?: ObservableOrSubscriberFunctionInstancer<T>)`
+
+Un hook simplificado que se suscribe a un observable y devuelve su valor actual junto con una función para actualizarlo. Es ideal para cuando solo necesitas leer y escribir el valor de un `EventObservableController` sin gestionar el suscriptor directamente.
+
+### Parámetros
+
+  * **`observable`**: La instancia de `EventObservableController` o una función que cree un `SubscriberController`.
+
+### Valores de Retorno
+
+Retorna una tupla `[value, next]`:
+
+1.  **`value: T | undefined`**: El valor actual del observable.
+2.  **`next: (value: T, force?: boolean) => void`**: Una función para actualizar el valor del observable.
+
+### Ejemplo de Uso
+
+```typescript
+import { useObservableData } from "./your-hooks-file";
+import { userNameObservable } from "./your-events-file";
+
+function UserProfileEditor() {
+    const [name, setName] = useObservableData(userNameObservable);
+
+    return (
+        <div>
+            <h3>Editar Perfil</h3>
+            <label>Nombre de usuario:</label>
+            <input 
+                type="text" 
+                value={name || ''} 
+                onChange={(e) => setName(e.target.value)} 
+            />
+        </div>
+    );
+}
+```
 
 -----
 
@@ -240,6 +312,8 @@ Proporciona una estructura para la **validación de modelos de formularios**, in
     const userValidator = appEvents.createValidator<UserForm>("userForm");
     ```
 
+  * **`addProp(key: keyof Model, defaultValidationValue?: boolean): void`**: Añade explícitamente una propiedad al validador para ser rastreada.
+
   * **`setModel(model: Model): void`**: Establece el modelo completo a validar.
 
   * **`setPartialModel(model: Model): void`**: Actualiza el modelo parcialmente.
@@ -259,6 +333,8 @@ Proporciona una estructura para la **validación de modelos de formularios**, in
   * **`getModel(): Model | undefined`**: Obtiene el modelo actual.
 
   * **`doValidation(): Promise<boolean>`**: Ejecuta las validaciones. Envía un evento broadcast y recopila los resultados.
+
+  * **`join(key: string, validator: ValidatorController<any> | null): void`**: Une un validador hijo a una clave específica del modelo actual. Permite validaciones anidadas donde el resultado del padre depende de los hijos.
 
   * **`setDebug(value: boolean): void`**: Activa/desactiva el modo de depuración.
 
@@ -308,7 +384,7 @@ Eventer proporciona un conjunto de hooks de React para integrar fácilmente sus 
 
 -----
 
-### 1\. `useObservable<T>(observable?: ObservableOrSubscriberFunctionInstancer<T>, callback2?: (v: T) => void)`
+### 3\. `useObservable<T>(observable?: ObservableOrSubscriberFunctionInstancer<T>, callback2?: (v: T) => void)`
 
 Este hook permite a un componente de React **suscribirse a un `EventObservableController` o a una función que cree un `SubscriberController`**, y obtener el valor actual del observable. El componente se **re-renderizará automáticamente** cada vez que el valor del observable cambie.
 
@@ -333,7 +409,7 @@ import { eventer } from "../utilities/eventer";
 import { useObservable } from "./your-hooks-file";
 
 const appEvents = eventer();
-const userNameObservable = appEvents.createObservavble("userName")("Invitado");
+const userNameObservable = appEvents.createObservable("userName")("Invitado");
 
 function UserNameDisplay() {
     const [name, subscriber] = useObservable(userNameObservable);
@@ -353,13 +429,13 @@ function UserNameDisplay() {
 
 -----
 
-### 2\. `useListener<Props extends any[], Returns>(event: EventOrBrocastOrListenerFunctionInstancer<Props, Returns>, callback?: (...props: Props) => (EventOrBrocastOrListenerFunctionInstancer<Props, Returns> extends EventBrocastController<Props, Returns> ? Promise<Returns> : EventOrBrocastOrListenerFunctionInstancer<Props, Returns> extends EventBrocastController<Props, Returns>["createBroadcastListener"] ? Promise<Returns> : void))`
+### 4\. `useListener<Props extends any[], Returns>(event: EventOrBroadcastOrListenerFunctionInstancer<Props, Returns>, callback?: (...props: Props) => (EventOrBroadcastOrListenerFunctionInstancer<Props, Returns> extends EventBroadcastController<Props, Returns> ? Promise<Returns> : EventOrBroadcastOrListenerFunctionInstancer<Props, Returns> extends EventBroadcastController<Props, Returns>["createBroadcastListener"] ? Promise<Returns> : void))`
 
-Este hook permite a un componente de React **escuchar eventos** creados con `EventController` o `EventBrocastController`, o directamente a un "listener instancer" (una función que crea un escuchador). El escuchador se registrará cuando el componente se monte y se limpiará automáticamente cuando el componente se desmonte.
+Este hook permite a un componente de React **escuchar eventos** creados con `EventController` o `EventBroadcastController`, o directamente a un "listener instancer" (una función que crea un escuchador). El escuchador se registrará cuando el componente se monte y se limpiará automáticamente cuando el componente se desmonte.
 
 ### Parámetros
 
-  * **`event`**: Una instancia de `EventController<Props>`, `EventBrocastController<Props, Returns>`, o una función que, al ser llamada (`event()`), retorna una instancia de `ListenerController`.
+  * **`event`**: Una instancia de `EventController<Props>`, `EventBroadcastController<Props, Returns>`, o una función que, al ser llamada (`event()`), retorna una instancia de `ListenerController`.
   * **`callback`** (opcional): La función que se ejecutará cuando el evento sea emitido. El tipo de retorno de este callback es inferido, permitiendo devolver `Promise<Returns>` para eventos broadcast y `void` para eventos normales.
 
 ### Valores de Retorno
@@ -396,7 +472,7 @@ function UserStatusMessage() {
 
 -----
 
-### 3\. `useGlobalTaskManager()`
+### 5\. `useGlobalTaskManager()`
 
 Este hook proporciona acceso a una instancia global de **`TaskManager`**, preconfigurada para tu aplicación. Permite gestionar y orquestar secuencias de tareas asíncronas desde cualquier componente de forma centralizada.
 
@@ -430,7 +506,7 @@ function TaskProgressMonitor() {
 
 -----
 
-### 4\. `useTask(callback: () => Promise<void>, execute?: boolean)`
+### 6\. `useTask(callback: () => Promise<void>, execute?: boolean)`
 
 Este hook permite **crear una tarea asíncrona** y añadirla a la instancia global de `TaskManager`. Es útil para encapsular operaciones asíncronas dentro de un componente que deben ser gestionadas por un orquestador de tareas.
 
@@ -473,9 +549,141 @@ function DataSyncComponent() {
 
 -----
 
+### 7\. `useValidator<T extends object>(model?: T)`
+
+Crea y mantiene una instancia de `ValidatorController` durante el ciclo de vida de un componente. Es el punto de partida para gestionar validaciones de formularios.
+
+### Parámetros
+
+  * **`model`** (opcional): El objeto de modelo inicial para el validador.
+
+### Valores de Retorno
+
+Retorna una tupla `[validator, model]`:
+
+1.  **`validator: ValidatorController<T>`**: La instancia del controlador de validador.
+2.  **`model: T | undefined`**: El modelo pasado como parámetro.
+
+### Ejemplo de Uso
+
+```typescript
+function RegistrationForm() {
+    const [formState, setFormState] = useState({ name: '', email: '' });
+    const [validator] = useValidator(formState);
+
+    // Lógica para vincular el validador a los campos del formulario...
+    return <form>{/* ... */}</form>;
+}
+```
+
+-----
+
+### 8\. `useValidatorJoin<T extends object>(key: string, validator: ValidatorController<any>)`
+
+Un hook esencial para formularios anidados. Crea un nuevo `ValidatorController` (hijo) y lo une automáticamente a un validador padre en una propiedad específica (`key`). La validación del padre dependerá del resultado de la validación del hijo.
+
+### Parámetros
+
+  * **`key`**: La clave en el modelo del validador padre donde se anidará la validación del hijo.
+  * **`validator`**: La instancia del `ValidatorController` padre.
+
+### Valores de Retorno
+
+Retorna una tupla `[newValidator]`:
+
+1.  **`newValidator: ValidatorController<T>`**: La nueva instancia del validador hijo.
+
+### Ejemplo de Uso
+
+```typescript
+// Componente hijo (ej. AddressForm.tsx)
+function AddressForm({ parentValidator }) {
+    const [addressState, setAddressState] = useState({ street: '', city: '' });
+    // Une este validador a la propiedad 'address' del validador padre
+    const [addressValidator] = useValidatorJoin('address', parentValidator);
+    
+    useEffect(() => {
+        addressValidator.setModel(addressState);
+    }, [addressState]);
+
+    // ... campos para calle y ciudad usando 'addressValidator'
+}
+
+// Componente padre (ej. UserForm.tsx)
+function UserForm() {
+    const [userState, setUserState] = useState({ name: '', address: null });
+    const [userValidator] = useValidator(userState);
+
+    return (
+        <form>
+            {/* ... campo para el nombre del usuario */}
+            <AddressForm parentValidator={userValidator} />
+        </form>
+    );
+}
+```
+
+-----
+
+### 9\. `useArray<T, P>(data: Array<T>, create: (parent?: P) => T)`
+
+Un hook de utilidad para gestionar arrays en el estado de React. Proporciona métodos convenientes para operaciones CRUD (Crear, Leer, Actualizar, Eliminar) que actualizan la vista automáticamente, evitando la manipulación manual del estado del array.
+
+### Parámetros
+
+  * **`data`**: El array inicial (la referencia original que será mutada).
+  * **`create`**: Una función factoría que define cómo crear nuevos elementos del tipo `T`.
+
+### Valores de Retorno
+
+Retorna un objeto con métodos que, al ser llamados, devuelven una función lista para ser usada en callbacks (ej. `onClick`):
+
+  * **`array: T[]`**: El array actual (estado reactivo).
+  * **`create(parent?: P)`**: Añade un nuevo elemento al final del array.
+  * **`createByIndex(index: number, parent?: P)`**: Inserta un nuevo elemento en una posición específica.
+  * **`remove(item: T)`**: Elimina un elemento específico por su referencia.
+  * **`removeByIndex(index: number)`**: Elimina un elemento por su índice.
+  * **`update(item: T)`**: Actualiza un elemento por su referencia.
+  * **`updateByIndex(index: number, item: T)`**: Reemplaza un elemento en un índice dado.
+  * **`updateAll(callback: (item: T) => T)`**: Actualiza todos los elementos usando un callback (similar a `map`).
+  * **`move(from: number, to: number)`**: Mueve un elemento de una posición a otra.
+  * **`getArray()`**: Devuelve la referencia al array original mutable.
+
+### Ejemplo de Uso
+
+```typescript
+function TodoList() {
+    // Es buena práctica usar useRef para mantener la referencia original del array
+    const initialTodos = useRef<Todo[]>([]).current;
+    const todoManager = useArray(initialTodos, () => ({ id: Date.now(), text: 'Nueva tarea' }));
+
+    return (
+        <div>
+            <button onClick={todoManager.create()}>Añadir Tarea</button>
+            <ul>
+                {todoManager.array.map((todo, index) => (
+                    <li key={todo.id}>
+                        {todo.text}
+                        <button onClick={todoManager.removeByIndex(index)}>Eliminar</button>
+                    </li>
+                ))}
+            </ul>
+        </div>
+    );
+}
+```
+
+-----
+
 ## Consideraciones de Desarrollo
 
-  * **Rendimiento en `emitAsync` y `broadcastEmitAsync`**: Los escuchadores se ejecutan de forma **secuencial** (`await` dentro de `reduce`). Esto asegura un orden predecible, pero si necesitas ejecución paralela para ciertos eventos, deberías considerar un patrón diferente (ej. `Promise.all`).
-  * **Manejo de Errores**: Es fundamental que los `callbacks` de tus escuchadores manejen sus propios errores o que implementes un mecanismo global de captura de errores para eventos simples si no usas `LoaderController`.
+  * **Rendimiento y Ejecución**: Por defecto, `emit` y `broadcastEmit` ejecutan los escuchadores de forma **secuencial**. Si necesitas ejecución paralela para mejorar el rendimiento en tareas independientes, utiliza `emitParallel` o `broadcastEmitParallel`.
+  * **Manejo de Errores**:
+      *   **Por defecto (`onError: 'break'`)**: Si un escuchador lanza una excepción, la ejecución se detiene y la promesa del evento se rechaza.
+      *   **Modo Continuo (`onError: 'continue'`)**: Puedes configurar un evento para que continúe ejecutando los siguientes escuchadores aunque uno falle:
+          ```typescript
+          const myEvent = appEvents.createEvent("myEvent", { onError: 'continue' })<[]>();
+          ```
+      *   **Ejecución Segura (`emitSettled`)**: Utiliza los métodos `*Settled` para obtener un reporte detallado de la ejecución (`EmitResult`) que incluye tanto los resultados exitosos como una lista de errores con contexto (`EventErrorContext`), evitando bloques `try-catch` externos.
   * **Depuración**: Utiliza el modo de depuración (`isDebugModeOn` en `GroupEvent` o `setDebug` en `ValidatorController`) para obtener logs útiles en la consola.
   * **Integración con React**: Los hooks y la provisión de `SubscriberControllerReact` facilitan la reactividad de tus componentes con observables. Recuerda manejar el ciclo de vida de las suscripciones (desuscribirse en el cleanup de `useEffect`) para evitar fugas de memoria.

@@ -1,15 +1,15 @@
 import { useEffect, useState } from "react";
-import { EventBrocastController, EventController, eventer, EventObservableController, SubscriberController, ValidatorController } from "./index";
+import { EventBroadcastController, EventController, eventer, EventObservableController, SubscriberController, ValidatorController } from "./index";
 
 
 type ObservableOrSubscriberFunctionInstancer<T> = EventObservableController<T> |
     EventObservableController<T>["createSubscriber"] |
     undefined;
 
-type EventOrBrocastOrListenerFunctionInstancer<Props extends any[], Returns> =
+type EventOrBroadcastOrListenerFunctionInstancer<Props extends any[], Returns> =
     EventController<Props> | EventController<Props>["createListener"] |
-    EventBrocastController<Props, Returns> |
-    EventBrocastController<Props, Returns>["createBroadcastListener"] |
+    EventBroadcastController<Props, Returns> |
+    EventBroadcastController<Props, Returns>["createBroadcastListener"] |
     undefined;
 
 /**
@@ -48,9 +48,9 @@ export function useObservableData<T>(observable?: ObservableOrSubscriberFunction
  * @returns 
  */
 export function useListener<Props extends any[], Returns>(
-    event: EventOrBrocastOrListenerFunctionInstancer<Props, Returns>,
-    callback?: (...props: Props) => EventOrBrocastOrListenerFunctionInstancer<Props, Returns> extends EventBrocastController<Props, Returns> ? Promise<Returns> :
-        EventOrBrocastOrListenerFunctionInstancer<Props, Returns> extends EventBrocastController<Props, Returns>["createBroadcastListener"] ? Promise<Returns> : void) {
+    event: EventOrBroadcastOrListenerFunctionInstancer<Props, Returns>,
+    callback?: (...props: Props) => EventOrBroadcastOrListenerFunctionInstancer<Props, Returns> extends EventBroadcastController<Props, Returns> ? Promise<Returns> :
+        EventOrBroadcastOrListenerFunctionInstancer<Props, Returns> extends EventBroadcastController<Props, Returns>["createBroadcastListener"] ? Promise<Returns> : void) {
     const [listener] = useState(typeof event == "function" && event() || (event as EventController<Props>)?.createListener());
     useEffect(() => { (listener as any)?.on(callback); return () => listener?.remove(); }, [])
     return null;
