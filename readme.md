@@ -23,7 +23,7 @@ Eventer es ideal para desacoplar la lógica de negocio de la interfaz de usuario
 ## Instalación
 
 ```bash
-npm i @calimpio/eventer
+npm i orquest-eventer
 ```
 
 -----
@@ -33,7 +33,7 @@ npm i @calimpio/eventer
 Para comenzar, importa la función `eventer` y crea una instancia de `GroupEvent`:
 
 ```typescript
-import { eventer } from "eventer";
+import { eventer } from "orquest-eventer";
 
 const appEvents = eventer("myApp"); // "myApp" es un prefijo opcional para los nombres de eventos, útil para depuración.
 ```
@@ -223,7 +223,7 @@ Retorna una tupla `[value, next]`:
 ### Ejemplo de Uso
 
 ```typescript
-import { useObservableData } from "eventer/react-eventer";
+import { useObservableData } from "orquest-eventer/react-eventer";
 import { userNameObservable } from "./your-events-file";
 
 function UserProfileEditor() {
@@ -360,8 +360,8 @@ Proporciona una estructura para la **validación de modelos de formularios**, in
 
 ```typescript
 import React, { useState, useEffect } from 'react';
-import { ValidatorController } from 'eventer';
-import { useListener, useObservable } from 'eventer/react-eventer';
+import { ValidatorController } from 'orquest-eventer';
+import { useListener, useObservable } from 'orquest-eventer/react-eventer';
 
 interface InputProps<T extends object> {
     /**
@@ -532,8 +532,8 @@ Retorna una tupla con tres elementos:
 
 ```typescript
 import { useEffect, useState } from "react";
-import { eventer } from "eventer";
-import { useObservable } from "eventer/react-eventer";
+import { eventer } from "orquest-eventer";
+import { useObservable } from "orquest-eventer/react-eventer";
 
 const appEvents = eventer();
 const userNameObservable = appEvents.createObservable("userName")("Invitado");
@@ -572,8 +572,8 @@ Este hook permite a un componente de React **escuchar eventos** creados con `Eve
 ### Ejemplo de Uso
 
 ```typescript
-import { eventer } from "eventer";
-import { useListener } from "eventer/react-eventer";
+import { eventer } from "orquest-eventer";
+import { useListener } from "orquest-eventer/react-eventer";
 
 const appEvents = eventer();
 const userSavedEvent = appEvents.createEvent("userSaved")<[userId: string]>();
@@ -610,7 +610,7 @@ Este hook proporciona acceso a una instancia global de **`TaskManager`**, precon
 ### Ejemplo de Uso
 
 ```typescript
-import { useGlobalTaskManager } from "eventer/react-eventer";
+import { useGlobalTaskManager } from "orquest-eventer/react-eventer";
 
 function TaskProgressMonitor() {
     const globalTaskManager = useGlobalTaskManager();
@@ -649,7 +649,7 @@ Este hook permite **crear una tarea asíncrona** y añadirla a la instancia glob
 ### Ejemplo de Uso
 
 ```typescript
-import { useTask, useGlobalTaskManager } from "eventer/react-eventer";
+import { useTask, useGlobalTaskManager } from "orquest-eventer/react-eventer";
 
 function DataSyncComponent() {
     const globalTaskManager = useGlobalTaskManager();
