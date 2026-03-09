@@ -20,6 +20,56 @@ Eventer es ideal para desacoplar la lógica de negocio de la interfaz de usuario
 
 -----
 
+### Ejemplo
+```typescript
+import { eventer } from "orquest-eventer";
+import { useListener } from "orquest-eventer/react-eventer";
+import { useState } from "react";
+import Notification, { NotificationProps } from "./Notification";
+
+//1. creas la instancia de eventer
+const events = eventer();
+
+//2. defines tus eventos
+const pushNotification = events.createEvent("pushNotification")<[children: React.ReactNode, duration: number, position?: NotificationProps["position"]]>()
+
+interface NotificationsViewProps {
+
+}
+
+const Notifications = function ({ }: NotificationsViewProps){
+    const [notifications, setNotifications ] = useState<{children: React.ReactNode, duration: number, position?: NotificationProps["position"]}[]>([])
+
+    //3. escuchas el evento desde react
+    useListener(pushNotification.createListener, (children, duration, position) => {
+        setNotifications(prev => [...prev, {children, duration, position}])
+    });
+
+    const onNotificationClose = (index: number) => () => {
+        setNotifications(prev => prev.filter((_, i) => i != index))
+    }
+
+    return (<>
+        {notifications.map((notification, index) => {
+            return <Notification key={index} duration={notification.duration} position={notification.position} onClose={onNotificationClose(index)}>
+                {notification.children}
+            </Notification>
+        })}
+    </>);
+}
+
+export default Notifications;
+
+//4. Distribuir los eventos
+/**
+ * Lanzar una notificaion 
+ * @param childern 
+ * @param duration
+ * @param position
+ */
+Notifications.pushNotification = pushNotification.emit;
+```
+
 ## Instalación
 
 ```bash
