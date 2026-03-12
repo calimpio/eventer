@@ -37,7 +37,7 @@ export function useObservableData<T>(observable?: ObservableOrSubscriberFunction
     const [, subscriber] = useObservable(observable, (v) => {
         setValue(() => v);
     });
-    return [value, subscriber.next]
+    return [value, subscriber?.next]
 }
 
 
