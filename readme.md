@@ -89,7 +89,7 @@ Notifications.pushNotification = pushNotification.emit;
 ## Instalación
 
 ```bash
-npm i orquest-eventer
+npm i orquest-eventer@3.2.6
 ```
 
 -----
