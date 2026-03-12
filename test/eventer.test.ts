@@ -144,10 +144,10 @@ describe('Eventer core functionality', () => {
   describe('validator controller', () => {
     test('set and get model + onChange', async () => {
       const events = eventer();
-      const val = events.createValidator<{x: number}>('v');
+      const val = events.createValidator<{ x: number }>('v');
       val.setModel({ x: 1 });
       expect(val.getModel()).toEqual({ x: 1 });
-      val.getProps('x', (v) => {}).onChange(2);
+      val.getProps('x', (v) => { }).onChange(2);
       // give time for debounce
       await new Promise((r) => setTimeout(r, 150));
       expect(val.getModel()?.x).toBe(2);
@@ -155,14 +155,35 @@ describe('Eventer core functionality', () => {
 
     test('join another validator', () => {
       const events = eventer();
-      const parent = events.createValidator<{a: string}>('p');
-      const child = events.createValidator<{b: string}>('c');
+      const parent = events.createValidator<{ a: string }>('p');
+      const child = events.createValidator<{ b: string }>('c');
       parent.join('child', child);
       parent.setModel({ a: 'foo' });
       child.setModel({ b: 'bar' });
       expect(parent.getModel()).toEqual({ a: 'foo' });
       expect(child.getModel()).toEqual({ b: 'bar' });
     });
+
+    test('loookup to lsiten a child changes from a parent validator', async () => {
+      const events = eventer();
+      const parent = events.createValidator<{ a: string }>('p');
+      const child = events.createValidator<{ b: string }>('c');
+      parent.setModel({ a: 'foo' });
+      child.setModel({ b: 'bar' });
+      child.lookup('child', parent);
+      let doChange = false; 
+      parent.listeners().createlookupChangeListener().on((lookupKey, key, child, model) => {
+        expect(lookupKey).toBe('child');
+        expect(key).toBe('b');
+        expect(child).toBe(child);
+        expect(model).toEqual({ b: 'baz' });
+        doChange = true;
+      });      
+      child.getProps('b').onChange('baz');
+      // give time for debounce and re-render breaks
+      await new Promise((r) => setTimeout(r, 150));
+      expect(doChange).toBe(true);    
+    })
   });
 
   describe('timer controller', () => {

@@ -1,5 +1,5 @@
 
-**Versión: 3.3.1**
+**Versión: 3.3.3**
 
 -----
 
@@ -76,7 +76,7 @@ Eventer es ideal para desacoplar la lógica de negocio de la interfaz de usuario
 ## Instalación
 
 ```bash
-npm i orquest-eventer@3.3.1
+npm i orquest-eventer@3.3.3
 ```
 
 -----
@@ -409,6 +409,10 @@ Proporciona una estructura para la **validación de modelos de formularios**, in
   * **`join(key: string, validator: ValidatorController<any> | null): void`**: Une un validador hijo a una clave específica del modelo actual. Permite validaciones anidadas donde el resultado del padre depende de los hijos.
 
   * **`setDebug(value: boolean): void`**: Activa/desactiva el modo de depuración.
+  
+  * **`lookup(key: string, parent: ValidatorController<any> | null): void`**: Asocia este validador (como hijo) a un validador padre bajo una clave. Esto permite que el padre reciba notificaciones de cambio desde el hijo a través del listener `createlookupChangeListener`.
+
+  * **`getParent(): ValidatorController<any> | null`**: Obtiene el validador padre que fue asignado mediante `lookup`.
 
   * **`setTaskManager(v: TaskManager | null): void` / `getTaskManager(): TaskManager | null`**: Para asociar un `TaskManager` al validador.
 
@@ -416,6 +420,7 @@ Proporciona una estructura para la **validación de modelos de formularios**, in
 
       * **`createSetTaskManagerListener()`**: Cuando se establece el `TaskManager`.
       * **`createValidationBroadcastListener()`**: Crea un escuchador que participa en el proceso de validación. Aquí es donde se debe implementar la lógica de validación para un campo específico.
+      * **`createlookupChangeListener()`**: Crea un escuchador que se activa cuando una propiedad en un validador hijo (asociado mediante `lookup`) cambia. El escuchador recibe la `lookupKey`, la clave de la propiedad que cambió, la instancia del validador hijo y el modelo actualizado del hijo.
 #### Ejemplo de uso:
 
 ```typescript

@@ -262,6 +262,18 @@ export interface ValidatorController<Model, Name extends string = string> {
      */
     join(key: string, validator: ValidatorController<any> | null): void
 
+
+    /**
+     * Modificar el validador padre para hacer `join` de los hijos al padre
+     * @param parent 
+     */
+    lookup(Key: string, parent: ValidatorController<any> | null):void
+
+    /**
+     * Obtener el validador padre
+     */
+    getParent(): ValidatorController<any> | null
+
     /**
      * Habilitar o deshabilitar el modo debug
      * @param value 
@@ -285,11 +297,19 @@ export interface ValidatorController<Model, Name extends string = string> {
          * Devolver validaciones de los campos del modelo
          */
         createValidationBroadcastListener(): ListenerController<[], [PropertyKey, boolean] | Promise<[PropertyKey, boolean]>, `To validate in props of ${Name}`>
+
+        /**
+         * Crear escuchador al cambiar los hijos si tienen padre
+         */
+        createlookupChangeListener(): ListenerController<[lookupKey: string, key: PropertyKey, child: ValidatorController<any>, model: any]>
     }
 }
 
 export interface FormEventsController<Model, Description extends string = string> {
-
+    /**
+     * 
+     */
+    getLookupChangeController(): EventController<[lookupKey: string, key: PropertyKey, child: ValidatorController<any>, model: any]>
     /**
      * Obtener los escuchadores de eventos del formulario
      */
@@ -1323,6 +1343,9 @@ export default class GroupEvent {
         let _config = { debug: false };
         let _debuger = makeDebuger(_config);
         let _taskManager: TaskManager | null = null;
+        let _parent: ValidatorController<any> | null = null;
+        let _lookupKey: string | undefined;
+        const _lookUp_onChange = this.createEvent("look-up-on-change." + name)<[joinKey: string, key: PropertyKey, child: ValidatorController<any>, model: any]>();
         const _joins: Record<string, ListenerController<[], [PropertyKey, boolean] | Promise<[PropertyKey, boolean]>, string>> = {};
         const _validatorJoins: Record<string, ValidatorController<any>> = {};
         const _setTaskManager = this.createEvent("setTaskManager." + name)<[taskManager: TaskManager | null]>();
@@ -1341,6 +1364,13 @@ export default class GroupEvent {
 
         // do not call functions from listener controller instances before return.
         return {
+            lookup(lookupKey, parent) {
+                _parent = parent;
+                _lookupKey = lookupKey;
+            },
+            getParent() {
+                return _parent;
+            },
             setModel: (model) => {
                 _model = model;
             },
@@ -1349,6 +1379,11 @@ export default class GroupEvent {
             },
             getEvents() {
                 return {
+
+                    getLookupChangeController() {
+                        return _lookUp_onChange;
+                    },
+
                     listeners: () => ({
                         createOnChangeListener() {
                             return _onChange.createListener();
@@ -1391,6 +1426,7 @@ export default class GroupEvent {
                             _debuger(`validadion ${name} onChange: ${key.toString()}`);
                             onChange && onChange(value);
                             await _onChange.emit(key, value);
+                            _parent && await _parent.getEvents().getLookupChangeController().emit(_lookupKey!, key, _parent, _model)
                         }, 100);
                     },
                 }
@@ -1442,7 +1478,10 @@ export default class GroupEvent {
                 },
                 createValidationBroadcastListener() {
                     return _makeValidations.createBroadcastListener();
-                }
+                },
+                createlookupChangeListener() {
+                    return _lookUp_onChange.createListener();
+                },
             })
         }
     }
