@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { use, useEffect, useMemo, useRef, useState } from "react";
 import { EventBroadcastController, EventController, eventer, EventObservableController, SubscriberController, ValidatorController } from "./index";
 
 
@@ -11,26 +11,6 @@ type EventOrBroadcastOrListenerFunctionInstancer<Props extends any[], Returns> =
     EventBroadcastController<Props, Returns> |
     EventBroadcastController<Props, Returns>["createBroadcastListener"] |
     undefined;
-
-/**
- * Observar el conetenido de un EventObservableController o Subscriber
- * @param observable 
- * @param callback2 funcion adicional si se desea 
- * @returns 
- * @description Se va usar ahora es `useSuscriber`
- */
-export function useObservable<T>(observable?: ObservableOrSubscriberFunctionInstancer<T>, callback2?: (v: T) => void):
-    [ObservableOrSubscriberFunctionInstancer<T> extends undefined ? unknown : T, ObservableOrSubscriberFunctionInstancer<T> extends undefined ? undefined : SubscriberController<T, string>, boolean] {
-    const [subscriber] = useState(typeof observable == "function" && observable() || (observable as EventObservableController<T> | undefined)?.createSubscriber());
-    const [subscriber2] = useState(callback2 ? (typeof observable == "function" && observable() || (observable as EventObservableController<T> | undefined)?.createSubscriber()) : undefined);
-    const state = useState(false);
-    const react = subscriber?.react();
-    useEffect(() => react?.updateEffect(state)(), [state[0]]);
-    useEffect(() => { callback2 && subscriber2?.subscribe(callback2); return () => callback2 && subscriber2?.unsubscribe() }, []);
-    const value = subscriber?.get() as ObservableOrSubscriberFunctionInstancer<T> extends undefined ? unknown : T;
-    const subs = subscriber as ObservableOrSubscriberFunctionInstancer<T> extends undefined ? undefined : SubscriberController<T, string>
-    return [value, subs, state[0]]
-}
 
 /**
  * Crea un susbcriptor para escuchar si el contenido de un observador al modifcarse sin re renderizar la vista
@@ -46,22 +26,6 @@ export function useSubscriber<T>(observable?: ObservableOrSubscriberFunctionInst
     const subs = subscriber as ObservableOrSubscriberFunctionInstancer<T> extends undefined ? undefined : SubscriberController<T, string>
     return [subs]
 }
-
-/**
- * 
- * @param observable 
- * @returns 
- * @description se va usar ahora `useSubscriberData`
- */
-export function useObservableData<T>(observable?: ObservableOrSubscriberFunctionInstancer<T>):
-    [T | undefined, (value: T, force?: boolean) => void] {
-    const [value, setValue] = useState<T | undefined>()
-    const [, subscriber] = useObservable(observable, (v) => {
-        setValue(() => v);
-    });
-    return [value, subscriber?.next]
-}
-
 
 /**
  * Obtener el valor del observable renderizando la vista en cada cambio.
@@ -131,7 +95,7 @@ export function useTask(callback: () => Promise<void>, execute?: boolean) {
  */
 export function useValidator<T extends object>(model?: T, buildValidator: boolean = true): [ValidatorController<T> | undefined, T | undefined] {
     const [events] = useState(eventer());
-    const [validator] = useState((buildValidator && events.createValidator<T>("validator"))|| undefined);
+    const [validator] = useState((buildValidator && events.createValidator<T>("validator")) || undefined);
     useEffect(() => {
         model && validator?.setModel(model);
     }, [model])
@@ -150,21 +114,132 @@ export function useValidatorModel<T extends object>(model: T): [ValidatorControl
 }
 
 /**
- * Crea un nuevo validador y lo adjunta a un validador padre. Recmendado para hacer validaciones anidadas.
+ * Realiza un join entre un `source` y un `target` con una `key`
+ * Se elimina el join cuando la vista se elemina
+ * @param source
+ * @param target
+ * @param key
+ * @returns 
+ */
+export function useValidatorJoinLeft<S, T>(
+    source?: ValidatorController<S> | null,
+    target?: ValidatorController<T> | null,
+    key?: string | null
+):
+    [ValidatorController<T> | undefined | null, ValidatorController<S> | undefined | null] {
+    const _key = useRef(key).current;
+    const _source = useRef(source).current;
+    const _target = useRef(target).current;
+    useEffect(() => {
+        if (_source && _target && _key) {
+            _source.join(_key, _target);
+            return () => {
+                _key && _source?.join(_key, null);
+            }
+        }
+    }, []);
+
+    return [_target, _source];
+}
+
+/**
+ * Crea un nuevo validador y lo adjunta a un validador padre. Recomendado para hacer validaciones anidadas.
  * Si `key` o `validator` son `undefined` o `null` no se crea el `join`
  * @param key 
  * @param validator 
  * @returns 
  */
-export function useValidatorJoin<T extends object>(key?: string|null, validator?: ValidatorController<any>|null): [ValidatorController<T> | undefined] {
+export function useValidatorJoin<T extends object>(key?: string | null, validator?: ValidatorController<any> | null): [ValidatorController<T> | undefined] {
     const [newValidator] = useValidator<T>(undefined, !!key && !!validator);
-    useEffect(() => { key && newValidator && validator?.join(key, newValidator) }, []);
-    useEffect(() => {
-        return () => {
-            key && validator?.join(key, null);
-        }
-    }, []);
+    useValidatorJoinLeft(validator, newValidator, key)
     return [newValidator];
+}
+
+interface InputProps<V> {
+    value: V,
+    disabled?: boolean,
+    focused?: boolean,
+    onChange: (event: any) => void
+}
+
+/**
+ * Validar una propiedad del modelo con Validador y aplicarle unas validaciones
+ * 
+ * para ejecuta las validactones esa: `validator.doValidation();//boolean`
+ * @param model 
+ * @param modelKey 
+ * @param defaultValue 
+ * @param validator 
+ * @param validations 
+ * @returns 
+ */
+export function useValidatorInput<K extends PropertyKey, V>(modelKey: K, defaultValue?: V, validator?: ValidatorController<Record<K, V>>, validations?: (value: V) => boolean | Promise<boolean>):
+    [InputProps<V>, ValidatorController<Record<K, V>> | undefined] {
+
+    const _model = useRef(validator?.getModel() || {} as Record<K, V>).current;
+    const _modelKey = useRef(modelKey).current;
+    const _validator = useRef(validator).current;
+    const [value, setValue] = useState<V>(defaultValue ?? (_model[_modelKey] as V) ?? ('' as V));
+    useMemo(() => {
+        if (defaultValue && !_model[_modelKey]) {
+            _model[_modelKey] = defaultValue;
+            _validator?.setPartialModel(_model);
+            setValue(defaultValue);
+        }
+    }, [])
+
+    useListener(_validator?.listeners().createValidationBroadcastListener, async () => {
+        if (validations) {
+            return [_modelKey, await validations(_model[_modelKey] as V)];
+        }
+        return [_modelKey, true];
+    });
+
+    const [disabled] = useSubscriberData(_validator?.getEvents().subscribers().createDisabledSubscriber);
+    const [focused] = useSubscriberData(_validator?.getEvents().subscribers().createFocusedSubscriber);
+
+    return [
+        {
+            value,
+            disabled,
+            focused: focused || undefined,
+            onChange: async (event: any) => {
+                const value = event.target.value as V;
+                setValue(value);
+                _model[_modelKey] = value;
+                _validator?.getProps(_modelKey).onChange(value);
+                if (validations) {
+                    await validations(value);
+                }
+            }
+        },
+        _validator
+    ]
+}
+
+
+/**
+ * Escuchar los cambios del modelo
+ * @param validator 
+ * @param callback 
+ */
+export function useValidatorOnChanges<T>(validator?: ValidatorController<T>, callback?: (key: keyof T, value: unknown) => void) {
+    const _validator = useRef(validator).current;
+    useListener(_validator?.getEvents().listeners().createOnChangeListener, (key: keyof T, value: unknown) => {
+        callback?.(key, value)
+    });
+}
+
+/**
+ * Escuchar los cambios de los validadores anidados por join
+ * @param validator 
+ * @param callback 
+ */
+export function useValidatorJoinOnChange(validator?: ValidatorController<any>, callback?: (joinKey: string, key: PropertyKey, child: ValidatorController<any>, model: any) => void){
+    const _validator = useRef(validator).current;
+    useListener(_validator?.listeners().createJoinOnChangeListener, (joinKey, key, child, model)=>{
+        callback?.(joinKey, key, child, model);
+    });
 }
 
 
@@ -175,7 +250,8 @@ export function useValidatorJoin<T extends object>(key?: string|null, validator?
  * @returns 
  */
 export function useArray<T, P>(data: Array<T>, create: (parent?: P) => T) {
-    const [array, setArray] = useState(data);
+    const _data = useRef(data).current;
+    const [array, setArray] = useState(_data);
 
 
     return {
@@ -289,4 +365,29 @@ export function useArray<T, P>(data: Array<T>, create: (parent?: P) => T) {
             return data;
         }
     }
+}
+
+/**
+ * Observar el conetenido de un EventObservableController o Subscriber
+ * @param observable 
+ * @param callback2 funcion adicional si se desea 
+ * @returns 
+ * @description Se va usar ahora es `useSuscriber`
+ * @deprecated
+ */
+export function useObservable<T>(observable?: ObservableOrSubscriberFunctionInstancer<T>, callback2?: (v: T) => void):
+    [ObservableOrSubscriberFunctionInstancer<T> extends undefined ? unknown : T, ObservableOrSubscriberFunctionInstancer<T> extends undefined ? undefined : SubscriberController<T, string>, boolean] {
+    throw "useObservable is deprecated, use useSubscriber instead"
+}
+
+/**
+ * 
+ * @param observable 
+ * @returns 
+ * @description se va usar ahora `useSubscriberData`
+ * @deprecated
+ */
+export function useObservableData<T>(observable?: ObservableOrSubscriberFunctionInstancer<T>):
+    [T | undefined, (value: T, force?: boolean) => void] {
+    throw "useObservableData is deprecated, use useSubscriberData instead"
 }

@@ -162,18 +162,18 @@ describe('Eventer core functionality', () => {
       child.setModel({ b: 'bar' });
       expect(parent.getModel()).toEqual({ a: 'foo' });
       expect(child.getModel()).toEqual({ b: 'bar' });
-    });
+    });    
 
-    test('loookup to lsiten a child changes from a parent validator', async () => {
+    test('joins to lsiten a joined changes model validator', async () => {
       const events = eventer();
       const parent = events.createValidator<{ a: string }>('p');
       const child = events.createValidator<{ b: string }>('c');
       parent.setModel({ a: 'foo' });
       child.setModel({ b: 'bar' });
-      child.lookup('child', parent);
+      child.join('parent', parent);
       let doChange = false; 
-      parent.listeners().createlookupChangeListener().on((lookupKey, key, child, model) => {
-        expect(lookupKey).toBe('child');
+      parent.listeners().createJoinOnChangeListener().on((lookupKey, key, child, model) => {
+        expect(lookupKey).toBe('parent');
         expect(key).toBe('b');
         expect(child).toBe(child);
         expect(model).toEqual({ b: 'baz' });

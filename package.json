@@ -1,6 +1,6 @@
 {
   "name": "orquest-eventer",
-  "version": "3.3.5",
+  "version": "3.4.0",
   "description": "Libreria para gestionar eventos en las apps",
   "main": "./index.ts",
   "type": "module",
@@ -9,6 +9,20 @@
   },
   "author": "Camilo Barbosa",
   "license": "MIT",
+  "keywords": [
+    "eventer",
+    "events",
+    "typescript",
+    "react",
+    "validation",
+    "observable",
+    "state-management",
+    "async",
+    "forms",
+    "reactive",
+    "event-driven",
+    "orquest"
+  ],
   "repository": "https://github.com/calimpio/eventer",
   "dependencies": {
     "eventer": "file:",
